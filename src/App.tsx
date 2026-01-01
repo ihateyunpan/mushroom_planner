@@ -354,7 +354,8 @@ function App() {
                 }
 
                 // 兼容性合并：保留新版默认数据，覆盖旧版数据
-                setData(prev => ({
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                setData(_ => ({
                     ...SAFE_INITIAL_DATA,
                     ...json
                 }));
@@ -377,10 +378,10 @@ function App() {
         <div className="app-container">
             <div className="app-header">
                 <div className="header-title-group">
-                    <div className="header-emoji" style={{fontSize: 40}}>🍄</div>
+                    <div className="header-emoji" style={{fontSize: 40}}><img src={"/logo.svg"} width="70px"/></div>
                     <div>
-                        <h1 style={{margin: 0, fontSize: '1.5rem'}}>菌种培育助手</h1>
-                        <div style={{fontSize: 12, color: '#888'}}>高效管理您的魔法温室</div>
+                        <h1 style={{margin: 0, fontSize: '1.5rem'}}>养菌助手</h1>
+                        <div style={{fontSize: 12, color: '#888'}}>贴心规划您的养菌计划</div>
                     </div>
                 </div>
                 <div className="header-actions">
