@@ -378,7 +378,7 @@ function App() {
         <div className="app-container">
             <div className="app-header">
                 <div className="header-title-group">
-                    <div className="header-emoji" style={{fontSize: 40}}><img src={"/logo.svg"} width="70px"/></div>
+                    <div className="header-emoji" style={{fontSize: 40}}><img src={"/logo.webp"} width="70px"/></div>
                     <div>
                         <h1 style={{margin: 0, fontSize: '1.5rem'}}>养菌助手</h1>
                         <div style={{fontSize: 12, color: '#888'}}>贴心规划您的养菌计划</div>
