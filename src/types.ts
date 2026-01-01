@@ -1,0 +1,85 @@
+// src/types.ts
+
+// --- 1. 基础常量定义 (代替 Enum) ---
+export const MushroomChildIds = {
+    CAO: 'cao',
+    CI: 'ci',
+    MAO: 'mao',
+    PAO: 'pao',
+    SHAN_HU: 'shanhu',
+    NIAO: 'niao',
+} as const;
+export type MushroomChildId = typeof MushroomChildIds[keyof typeof MushroomChildIds];
+
+
+export const Woods = {
+    BO_MU: '柏木',
+    QIAN_NIU: '牵牛',
+    FENG_MU: '枫木',
+    CHANG: '常春',
+} as const;
+export type WoodType = typeof Woods[keyof typeof Woods];
+
+export const Lights = {
+    HUO: '火炬',
+    YU_RONG: '羽绒',
+} as const;
+export type LightType = typeof Lights[keyof typeof Lights];
+
+export const Humidifiers = {
+    ZHU: '竹筒',
+    NIAO: '小鸟',
+} as const;
+export type HumidifierType = typeof Humidifiers[keyof typeof Humidifiers];
+
+export const TimeRanges = {
+    DAY: '白天',
+    NIGHT: '夜晚',
+} as const;
+export type TimeType = typeof TimeRanges[keyof typeof TimeRanges];
+
+export const SpecialConditions = {
+    MUCH: '营养过剩',
+    LESS: '营养不良',
+    BUG: '虫害'
+} as const;
+export type SpecialConditionType = typeof SpecialConditions[keyof typeof SpecialConditions];
+
+
+// --- 2. 核心数据模型 ---
+export interface MushroomChild {
+    id: MushroomChildId;
+    name: string;
+}
+
+
+// 菌种定义 (数据库行)
+export interface MushroomDef {
+    id: string;
+    name: string;
+    pinyin: string;
+    starter: MushroomChildId; // 初始菌种的id
+    wood?: WoodType; // 如果未定义，表示兼容任何木头
+    light?: LightType; // 如果未定义，表示兼容任何灯
+    humidifier?: HumidifierType; // 如果未定义，表示兼容任何湿度
+    time?: TimeType; // 如果未定义，表示兼容任何时间
+    special?: SpecialConditionType; // 如果未定义，就是不需要特殊情况
+    save?: boolean // 如果有特殊情况，要不要处理
+}
+
+// 订单
+export interface Order {
+    id: string;
+    name: string;
+    items: { mushroomId: string; count: number }[];
+    active: boolean; // 是否要做这个订单
+}
+
+// 用户存档数据
+export interface UserSaveData {
+    orders: Order[];
+    inventory: Record<string, number>; // mushroomId -> count (库存)
+    unlockedWoods: WoodType[];
+    unlockedLights: LightType[];
+    unlockedHumidifiers: HumidifierType[];
+}

@@ -1,0 +1,101 @@
+/* src/App.css */
+
+/* === 基础重置与全局样式 === */
+#root {
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    text-align: left; /* 重置可能存在的默认居中 */
+}
+
+/* === 主容器 === */
+.app-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 20px;
+    font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: #333;
+    box-sizing: border-box;
+}
+
+/* === 头部区域 === */
+.app-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid #eee;
+}
+
+.header-title-group {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.header-actions {
+    display: flex;
+    gap: 10px;
+}
+
+/* === 核心布局 (左侧控制 + 右侧计划) === */
+.main-layout {
+    display: grid;
+    /* 电脑端：左侧固定宽度范围，右侧自适应 */
+    grid-template-columns: minmax(350px, 420px) 1fr;
+    gap: 25px;
+    align-items: start;
+}
+
+/* === 培育计划网格 === */
+.plan-grid {
+    display: grid;
+    /* 自动填充，最小宽度300px，不够就换行 */
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 15px;
+}
+
+/* === 响应式规则 (Media Queries) === */
+
+/* 平板/窄屏电脑 (宽度小于 900px) */
+@media (max-width: 900px) {
+    .main-layout {
+        /* 改为单列布局，左侧面板在上，右侧计划在下 */
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+}
+
+/* 手机端 (宽度小于 600px) */
+@media (max-width: 600px) {
+    .app-container {
+        padding: 10px; /* 减小内边距 */
+    }
+
+    .app-header {
+        flex-direction: column; /* 头部垂直排列 */
+        align-items: flex-start;
+        gap: 15px;
+    }
+
+    .header-actions {
+        width: 100%;
+        justify-content: space-between; /* 按钮撑满一行 */
+    }
+
+    .plan-grid {
+        /* 手机上卡片占满一行，防止内容过于拥挤 */
+        grid-template-columns: 1fr;
+    }
+
+    /* 调整字体大小 */
+    h1 {
+        font-size: 1.25rem !important;
+    }
+
+    /* 隐藏非必要的装饰性元素（如大Emoji），节省空间 */
+    .header-emoji {
+        display: none;
+    }
+}
