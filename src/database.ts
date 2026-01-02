@@ -1687,8 +1687,8 @@ const CAI_MUSHROOMS: MushroomDef[] = [
     },
     {
         id: 'cai5',
-        name: '通常水平太菜菜菜菌',
-        pinyin: 'tcsptcccj',
+        name: '通常水平太菜菜菌',
+        pinyin: 'tcsptccj',
         starter: MushroomChildIds.CAI,
         wood: Woods.GE_TENG,
         light: Lights.HUO,

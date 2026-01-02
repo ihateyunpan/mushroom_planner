@@ -4,7 +4,7 @@ import type { MissingItem } from './logic';
 import type { HumidifierType, LightType, SpecialConditionType, WoodType } from './types';
 import { SpecialConditions } from './types';
 
-export const getMushroomImg = (id: string) => `/mushrooms/${id}.png`;
+export const getMushroomImg = (id: string) => `/mushrooms/${id}.webp`;
 
 export const getChildImg = (id: string, special: SpecialConditionType | undefined) => {
     let specialCode = '';
@@ -21,7 +21,7 @@ export const getChildImg = (id: string, special: SpecialConditionType | undefine
         default:
             specialCode = '';
     }
-    return `/mushroom_children/${id}${specialCode}.png`;
+    return `/mushroom_children/${id}${specialCode}.webp`;
 };
 
 export const getSourceInfo = (type: MissingItem['type'], value: string) => {
@@ -39,7 +39,7 @@ export const getToolIcon = (type: MissingItem['type']) => {
 };
 
 export const TOOL_INFO: Record<string, { name: string; img: string }> = {
-    [SpecialConditions.LESS]: {name: '菇菇滋补汤', img: '/tools/tool1.png'},
-    [SpecialConditions.MUCH]: {name: '菇菇消食片', img: '/tools/tool2.png'},
-    [SpecialConditions.BUG]: {name: '虫虫驱散水', img: '/tools/tool3.png'},
+    [SpecialConditions.LESS]: {name: '菇菇滋补汤', img: '/tools/tool1.webp'},
+    [SpecialConditions.MUCH]: {name: '菇菇消食片', img: '/tools/tool2.webp'},
+    [SpecialConditions.BUG]: {name: '虫虫驱散水', img: '/tools/tool3.webp'},
 };
