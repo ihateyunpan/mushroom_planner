@@ -12,7 +12,6 @@ import {
     Woods,
     type WoodType
 } from './types';
-import * as trace_events from "node:trace_events";
 
 
 export const MUSHROOM_CHILDREN: Record<MushroomChildId, string> = {
