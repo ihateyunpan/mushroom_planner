@@ -1,24 +1,18 @@
 // src/components/PlanPanel.tsx
 import React, { useMemo } from 'react';
 import { MUSHROOM_CHILDREN } from '../database';
-import type { CalculationResult, PlanBatch } from '../logic';
+import type { CalculationResult, PlanBatch, PlanTask } from '../logic';
 import { TimeRanges } from '../types';
 import { getChildImg, getMushroomImg, getSourceInfo, getToolIcon, TOOL_INFO } from '../utils';
 import { btnStyle, CollapsibleSection, EnvBadge, MiniImg } from './Common';
 
 interface PlanPanelProps {
     plan: CalculationResult;
-    completedBatches: PlanBatch[]; // 新增：已完成的批次列表
-    onCompleteBatch: (batch: PlanBatch) => void; // 新增：完成回调
+    onCompleteTask: (task: PlanTask) => void;
     onRefresh: () => void;
 }
 
-export const PlanPanel: React.FC<PlanPanelProps> = ({
-                                                        plan: {batches, missingSummary},
-                                                        completedBatches,
-                                                        onCompleteBatch,
-                                                        onRefresh
-                                                    }) => {
+export const PlanPanel: React.FC<PlanPanelProps> = ({plan: {batches, missingSummary}, onCompleteTask, onRefresh}) => {
 
     const hasStrictDay = batches.some(b => b.env.time === TimeRanges.DAY);
     const hasStrictNight = batches.some(b => b.env.time === TimeRanges.NIGHT);
@@ -27,9 +21,6 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
     const dayBatches = showSplitLayout ? batches.filter(b => b.env.time === TimeRanges.DAY || b.env.time === '任意') : [];
     const nightBatches = showSplitLayout ? batches.filter(b => b.env.time === TimeRanges.NIGHT || b.env.time === '任意') : [];
 
-    // 创建 ID 到 序号 的映射，用于显示 "见第X批"
-    // 注意：已完成的批次不参与序号重新计算，或者应该保持它们被完成时的序号？
-    // 为简单起见，这里只对当前活跃的批次进行编号，已完成的批次可以单独处理或显示"已完成"
     const batchIndexMap = useMemo(() => {
         const map = new Map<string, number>();
         batches.forEach((b, i) => map.set(b.id, i + 1));
@@ -51,8 +42,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
         };
     };
 
-    const renderBatch = (batch: PlanBatch, idx: number, isFlexibleTime: boolean, isCompleted: boolean) => {
-        // --- 分开统计核心道具和顺风车道具 ---
+    const renderBatch = (batch: PlanBatch, idx: number, isFlexibleTime: boolean) => {
         const batchTools: Record<string, number> = {};
         const passengerTools: Record<string, number> = {};
 
@@ -69,64 +59,30 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
             }
         });
 
-        // 排序：核心任务在前，顺风车在后
         const sortedTasks = [...batch.tasks].sort((a, b) => {
             if (a.isPassenger === b.isPassenger) return 0;
             return a.isPassenger ? 1 : -1;
         });
 
-        const batchNumber = isCompleted ? '已完成' : (batchIndexMap.get(batch.id) || idx + 1);
-
         return (
             <CollapsibleSection
-                key={batch.id} defaultOpen={!isCompleted}
+                key={batch.id} defaultOpen={true}
                 title={
-                    <div style={{display: 'flex', alignItems: 'center', gap: 8, opacity: isCompleted ? 0.6 : 1}}>
-                        <span style={{textDecoration: isCompleted ? 'line-through' : 'none'}}>
-                            {isCompleted ? `🏁 ${batchNumber}` : `第${batchNumber}批`}: {batch.env.wood}
-                        </span>
-                        {isFlexibleTime && !isCompleted && <span style={{
+                    <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
+                        <span>第{batchIndexMap.get(batch.id) || idx + 1}批: {batch.env.wood}</span>
+                        {isFlexibleTime && <span style={{
                             fontSize: 11,
                             background: '#e0f7fa',
                             color: '#006064',
                             padding: '1px 5px',
                             borderRadius: 4
                         }}>🕒 时间任意</span>}
-                        {isCompleted && <span style={{
-                            fontSize: 11,
-                            background: '#eee',
-                            color: '#666',
-                            padding: '1px 5px',
-                            borderRadius: 4
-                        }}>✅ 已完成</span>}
                     </div>
                 }
-                headerBg={isCompleted ? '#f0f0f0' : (batch.missingEquipment.length > 0 ? '#fff3e0' : (isFlexibleTime ? '#f0f4c3' : '#f1f8e9'))}
-                headerColor={isCompleted ? '#999' : (batch.missingEquipment.length > 0 ? '#e65100' : '#33691e')}
-                action={!isCompleted ? (
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            if (confirm('确认完成此批次？\n\n完成后：\n1. 菌种将自动加入库存\n2. 计算器将重新规划剩余需求')) {
-                                onCompleteBatch(batch);
-                            }
-                        }}
-                        style={{
-                            ...btnStyle,
-                            background: '#4caf50',
-                            color: '#fff',
-                            border: 'none',
-                            fontSize: 12,
-                            padding: '4px 10px'
-                        }}
-                    >
-                        ✅ 完成此批
-                    </button>
-                ) : null}
+                headerBg={batch.missingEquipment.length > 0 ? '#fff3e0' : (isFlexibleTime ? '#f0f4c3' : '#f1f8e9')}
+                headerColor={batch.missingEquipment.length > 0 ? '#e65100' : '#33691e'}
             >
-                {/* 内容区域 (已完成的会半透明显示) */}
-                <div style={{opacity: isCompleted ? 0.6 : 1, filter: isCompleted ? 'grayscale(80%)' : 'none'}}>
-                    {/* 环境详情 */}
+                <div>
                     <div style={{
                         display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 15, fontSize: 13,
                         background: '#fafafa', padding: 10, borderRadius: 6
@@ -135,14 +91,13 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                             <EnvBadge label="木头" value={batch.env.wood} icon="🪵"/>
                             <EnvBadge label="日照" value={batch.env.light} icon="💡"/>
                             <EnvBadge label="补水" value={batch.env.humidifier} icon="💧"/>
-                            {!isCompleted && batch.missingEquipment.length > 0 && <div style={{
+                            {batch.missingEquipment.length > 0 && <div style={{
                                 color: 'red',
                                 fontWeight: 'bold',
                                 marginLeft: 'auto'
                             }}>缺: {batch.missingEquipment.map(m => m.value).join(', ')}</div>}
                         </div>
 
-                        {/* 核心道具展示 */}
                         <div style={{
                             borderTop: '1px dashed #eee',
                             paddingTop: 8,
@@ -172,7 +127,6 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                             )}
                         </div>
 
-                        {/* 顺风车道具展示 */}
                         {Object.keys(passengerTools).length > 0 && (
                             <div style={{
                                 marginTop: -2,
@@ -197,7 +151,6 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                         )}
                     </div>
 
-                    {/* 任务列表 */}
                     <div className="plan-grid">
                         {sortedTasks.map((task, tIdx) => {
                             const isPassenger = !!task.isPassenger;
@@ -307,6 +260,26 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                 </div>
                                             </div>
                                         )}
+                                        {/* 单项完成按钮 */}
+                                        <div style={{marginTop: 8, display: 'flex', justifyContent: 'flex-end'}}>
+                                            <button
+                                                onClick={() => onCompleteTask(task)}
+                                                style={{
+                                                    cursor: 'pointer',
+                                                    border: '1px solid #ddd',
+                                                    background: '#f5f5f5',
+                                                    color: '#333',
+                                                    borderRadius: 4,
+                                                    padding: '4px 8px',
+                                                    fontSize: 12,
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: 4
+                                                }}
+                                            >
+                                                ✅ 收取
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             );
@@ -365,7 +338,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                     </div>
                 )}
 
-                {batches.length === 0 && completedBatches.length === 0 ? (
+                {batches.length === 0 ? (
                     <div style={{textAlign: 'center', padding: 40, color: '#aaa'}}>
                         <div style={{fontSize: 40, marginBottom: 10}}>🎉</div>
                         需求满足</div>
@@ -392,7 +365,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                             fontWeight: 'normal',
                                             color: '#888'
                                         }}>(含时间任意的批次)</span></h3>
-                                        {dayBatches.map((batch, i) => renderBatch(batch, i, batch.env.time === '任意', false))}
+                                        {dayBatches.map((batch, i) => renderBatch(batch, i, batch.env.time === '任意'))}
                                     </div>
                                 )}
 
@@ -414,7 +387,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                             fontWeight: 'normal',
                                             color: '#888'
                                         }}>(含时间任意的批次)</span></h3>
-                                        {nightBatches.map((batch, i) => renderBatch(batch, i, batch.env.time === '任意', false))}
+                                        {nightBatches.map((batch, i) => renderBatch(batch, i, batch.env.time === '任意'))}
                                     </div>
                                 )}
                             </>
@@ -439,30 +412,10 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                             fontWeight: 'normal',
                                             color: '#888'
                                         }}>{config.sub}</span></h3>
-                                        {batches.map((batch, i) => renderBatch(batch, i, batch.env.time === '任意', false))}
+                                        {batches.map((batch, i) => renderBatch(batch, i, batch.env.time === '任意'))}
                                     </div>
                                 );
                             })()
-                        )}
-
-                        {/* 已完成的批次 (移到最后) */}
-                        {completedBatches.length > 0 && (
-                            <div style={{
-                                background: '#f5f5f5',
-                                padding: 15,
-                                borderRadius: 8,
-                                border: '1px solid #ddd',
-                                marginTop: 10
-                            }}>
-                                <h3 style={{
-                                    marginTop: 0,
-                                    color: '#666',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 8
-                                }}>🏁 已完成的批次</h3>
-                                {completedBatches.map((batch, i) => renderBatch(batch, i, false, true))}
-                            </div>
                         )}
                     </div>
                 )}

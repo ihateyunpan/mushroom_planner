@@ -34,7 +34,7 @@ export const Woods = {
     LOVE: '爱心',
     QIAN_NIU: '牵牛',
     QING: '青金',
-    YAN: '岩溶',
+    YAN: '炎溶',
     MING: '名琴',
     SHU: '书案',
 } as const;

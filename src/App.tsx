@@ -1,7 +1,8 @@
 // src/App.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import { MUSHROOM_DB } from './database';
-import { calculateOptimalRoute, type PlanBatch } from './logic';
+import type { PlanTask } from './logic';
+import { calculateOptimalRoute } from './logic';
 import type { MushroomDef, UserSaveData } from './types';
 import { Humidifiers, Lights, Woods } from './types';
 import './App.css';
@@ -23,6 +24,7 @@ const SAFE_INITIAL_DATA: UserSaveData = {
 };
 
 const STORAGE_KEY = 'MUSHROOM_HELPER_DATA_V1';
+const TAB_STORAGE_KEY = 'MUSHROOM_HELPER_ACTIVE_TAB'; // 新增：Tab状态的存储键
 
 function App() {
     // --- State ---
@@ -35,14 +37,22 @@ function App() {
         }
         return SAFE_INITIAL_DATA;
     });
-    const [activeTab, setActiveTab] = useState<'calculator' | 'encyclopedia'>('calculator');
+
+    // 修改：初始化时从 LocalStorage 读取 activeTab
+    const [activeTab, setActiveTab] = useState<'calculator' | 'encyclopedia'>(() => {
+        try {
+            const savedTab = localStorage.getItem(TAB_STORAGE_KEY);
+            return (savedTab === 'encyclopedia' || savedTab === 'calculator') ? savedTab : 'calculator';
+        } catch {
+            return 'calculator';
+        }
+    });
+
     const [newOrderName, setNewOrderName] = useState('');
     const [planVersion, setPlanVersion] = useState(0);
     const [editingOrderIds, setEditingOrderIds] = useState<Set<string>>(new Set());
 
-    // 新增：已完成的批次记录 (本次会话有效，刷新后通常不需要保留，或者也可以存localstorage，这里暂存内存)
-    const [completedBatches, setCompletedBatches] = useState<PlanBatch[]>([]);
-
+    // 数据持久化 Effect
     useEffect(() => {
         try {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -50,6 +60,15 @@ function App() {
             console.error(e);
         }
     }, [data]);
+
+    // 新增：Tab 状态持久化 Effect
+    useEffect(() => {
+        try {
+            localStorage.setItem(TAB_STORAGE_KEY, activeTab);
+        } catch (e) {
+            console.error(e);
+        }
+    }, [activeTab]);
 
     // --- Computed ---
     const relevantMushrooms = useMemo(() => {
@@ -75,20 +94,16 @@ function App() {
         });
     };
 
-    // 新增：处理批次完成
-    const handleCompleteBatch = (batch: PlanBatch) => {
-        // 1. 更新库存 (将批次里所有产出都加入库存)
-        setData(prev => {
-            const newInventory = {...prev.inventory};
-            batch.tasks.forEach(task => {
+    // 处理单项完成 (只更新库存，不处理整批逻辑)
+    const handleCompleteTask = (task: PlanTask) => {
+        if (window.confirm(`确认收取 ${task.countNeeded} 个 ${task.mushroom.name} 吗？\n\n(确认后将更新库存，该任务将因需求满足而从计划中移除)`)) {
+            setData(prev => {
+                const newInventory = {...prev.inventory};
                 const current = newInventory[task.mushroom.id] || 0;
                 newInventory[task.mushroom.id] = current + task.countNeeded;
+                return {...prev, inventory: newInventory};
             });
-            return {...prev, inventory: newInventory};
-        });
-
-        // 2. 将该批次移动到已完成列表
-        setCompletedBatches(prev => [...prev, batch]);
+        }
     };
 
     const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -100,7 +115,6 @@ function App() {
                 const json = JSON.parse(ev.target?.result as string);
                 if (!json || !Array.isArray(json.orders)) throw new Error('格式无效');
                 setData(() => ({...SAFE_INITIAL_DATA, ...json}));
-                setCompletedBatches([]); // 导入新存档时清空已完成记录
                 alert('✅ 存档导入成功！');
             } catch (err: unknown) {
                 alert(`❌ 导入失败: ${(err as Error).message}`);
@@ -219,8 +233,7 @@ function App() {
                     </div>
                     <PlanPanel
                         plan={calculationResult}
-                        completedBatches={completedBatches}
-                        onCompleteBatch={handleCompleteBatch}
+                        onCompleteTask={handleCompleteTask}
                         onRefresh={() => setPlanVersion(v => v + 1)}
                     />
                 </div>

@@ -1,7 +1,8 @@
 // src/components/Encyclopedia.tsx
 import React, { useMemo, useState } from 'react';
 import { MUSHROOM_CHILDREN, MUSHROOM_DB } from '../database';
-import { Humidifiers, Lights, MushroomChildIds, SpecialConditions, Woods } from '../types';
+// 修改点1：引入 TimeRanges
+import { Humidifiers, Lights, MushroomChildIds, SpecialConditions, TimeRanges, Woods } from '../types';
 import { getChildImg, getMushroomImg, TOOL_INFO } from '../utils';
 import { CollapsibleSection, EnvBadge, MiniImg } from './Common';
 
@@ -39,6 +40,7 @@ export const Encyclopedia: React.FC = () => {
             if (filters.wood !== 'all' && m.wood !== filters.wood) return false;
             if (filters.light !== 'all' && m.light !== filters.light) return false;
             if (filters.humidifier !== 'all' && m.humidifier !== filters.humidifier) return false;
+            // 时间过滤逻辑 (之前已有逻辑，现在有了UI就能生效了)
             if (filters.time !== 'all' && m.time !== filters.time) return false;
             if (filters.special !== 'all' && m.special !== filters.special) return false;
             if (filters.save !== 'all') {
@@ -69,6 +71,18 @@ export const Encyclopedia: React.FC = () => {
                         alignItems: 'center',
                         gap: 4
                     }}>
+                        <span>📚 当前筛选:</span>
+                        <span style={{
+                            background: '#fff',
+                            padding: '2px 8px',
+                            borderRadius: 10,
+                            fontSize: 12,
+                            fontWeight: 'bold',
+                            border: '1px solid #bbdefb'
+                        }}>
+                            {/* 显示：当前筛选数量 / 总数量 */}
+                            {filteredList.length} / {MUSHROOM_DB.length}
+                        </span>
                         <span>📚 收录进度:</span>
                         <span style={{
                             background: '#fff',
@@ -79,7 +93,7 @@ export const Encyclopedia: React.FC = () => {
                             border: '1px solid #bbdefb'
                         }}>
                             {/* 显示：当前筛选数量 / 总数量 */}
-                            {filteredList.length} / 285
+                            {MUSHROOM_DB.length} / 285
                         </span>
                     </div>
                 }
@@ -135,6 +149,15 @@ export const Encyclopedia: React.FC = () => {
                                     onChange={e => setFilters({...filters, humidifier: e.target.value})}>
                                 <option value="all">全部</option>
                                 {Object.values(Humidifiers).map(h => <option key={h} value={h}>{h}</option>)}
+                            </select>
+                        </label>
+                        {/* 修改点2：增加时间筛选 UI */}
+                        <label>
+                            <div style={{fontSize: 12, color: '#888', marginBottom: 4}}>时间</div>
+                            <select style={selectStyle} value={filters.time}
+                                    onChange={e => setFilters({...filters, time: e.target.value})}>
+                                <option value="all">全部</option>
+                                {Object.values(TimeRanges).map(t => <option key={t} value={t}>{t}</option>)}
                             </select>
                         </label>
                         <label>
