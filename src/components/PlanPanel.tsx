@@ -66,7 +66,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({plan: {batches, missingSumm
 
         // 修改点：构建详细的环境标题
         // 将不是“任意”的环境条件拼接在一起
-        const envParts = [batch.env.wood];
+        const envParts: string[] = [batch.env.wood];
         if (batch.env.light !== '任意') envParts.push(batch.env.light);
         if (batch.env.humidifier !== '任意') envParts.push(batch.env.humidifier);
 
