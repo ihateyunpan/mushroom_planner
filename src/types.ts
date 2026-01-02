@@ -103,3 +103,14 @@ export interface UserSaveData {
     unlockedLights: LightType[];
     unlockedHumidifiers: HumidifierType[];
 }
+
+export interface Profile {
+    id: string;
+    name: string;
+    data: UserSaveData;
+}
+
+export interface GlobalStorage {
+    activeProfileId: string;
+    profiles: Profile[];
+}
