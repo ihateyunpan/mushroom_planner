@@ -33,6 +33,8 @@ const getSpecialStyle = (special: string) => {
 interface EncyclopediaProps {
     collectedIds: string[];
     onToggleCollection: (id: string) => void;
+    // 新增：批量收集回调
+    onBatchCollect: (ids: string[]) => void;
     unlockedWoods: WoodType[];
     unlockedLights: LightType[];
     unlockedHumidifiers: HumidifierType[];
@@ -41,6 +43,7 @@ interface EncyclopediaProps {
 export const Encyclopedia: React.FC<EncyclopediaProps> = ({
                                                               collectedIds,
                                                               onToggleCollection,
+                                                              onBatchCollect,
                                                               unlockedWoods,
                                                               unlockedLights,
                                                               unlockedHumidifiers
@@ -143,6 +146,20 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
             return b.score - a.score;
         });
     }, [filteredList, collectedIds, unlockedWoods, unlockedLights, unlockedHumidifiers]);
+
+    // 计算当前筛选结果中，有多少个“未收集”的菌种 ID
+    const uncollectedIdsInView = useMemo(() => {
+        return sortedDisplayList
+            .filter(m => !collectedIds.includes(m.id))
+            .map(m => m.id);
+    }, [sortedDisplayList, collectedIds]);
+
+    const handleBatchClick = () => {
+        if (uncollectedIdsInView.length === 0) return;
+        if (confirm(`确定要将当前筛选列表中的 ${uncollectedIdsInView.length} 个未收集菌种全部标记为“已收集”吗？`)) {
+            onBatchCollect(uncollectedIdsInView);
+        }
+    };
 
     // Check visibility for FAB
     const hasCollectedInView = sortedDisplayList.some(m => collectedIds.includes(m.id));
@@ -348,17 +365,42 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
                 </CollapsibleSection>
             )}
 
+            {/* 新增：批量收集按钮 (位于列表上方) */}
+            {uncollectedIdsInView.length > 0 && (
+                <div style={{marginTop: 15, marginBottom: 5, display: 'flex', justifyContent: 'flex-end'}}>
+                    <button
+                        onClick={handleBatchClick}
+                        style={{
+                            padding: '8px 16px',
+                            background: '#e8f5e9',
+                            color: '#2e7d32',
+                            border: '1px solid #a5d6a7',
+                            borderRadius: 6,
+                            cursor: 'pointer',
+                            fontWeight: 'bold',
+                            fontSize: 13,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                        }}
+                    >
+                        <span>✨</span>
+                        一键收集当前页 {uncollectedIdsInView.length} 个新发现
+                    </button>
+                </div>
+            )}
+
             {/* 底部：图鉴列表 */}
             <div style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
                 gap: 15,
-                marginTop: 20
+                marginTop: 15
             }}>
                 {sortedDisplayList.map((m, idx) => {
                     const isCollected = collectedIds.includes(m.id);
-                    // 检测分界点：当前项已收集，且是列表第一项 或者 前一项未收集
-                    // 这意味着此处是“未收集”到“已收集”的分割线
+                    // 检测分界点
                     const prevIsCollected = idx > 0 ? collectedIds.includes(sortedDisplayList[idx - 1].id) : false;
                     const showSeparator = isCollected && (idx === 0 || !prevIsCollected);
 
@@ -366,7 +408,7 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
                         <React.Fragment key={m.id}>
                             {showSeparator && (
                                 <div
-                                    ref={collectedStartRef} // 锚点位置
+                                    ref={collectedStartRef}
                                     style={{
                                         gridColumn: '1 / -1',
                                         marginTop: 20, marginBottom: 10,

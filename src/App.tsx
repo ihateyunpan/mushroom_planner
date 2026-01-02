@@ -105,7 +105,7 @@ function App() {
         });
     };
 
-    // --- 新增：图鉴收集状态切换逻辑 ---
+    // --- 图鉴收集逻辑 ---
     const toggleCollection = (id: string) => {
         setData(prev => {
             const list = prev.collectedMushrooms || [];
@@ -114,6 +114,24 @@ function App() {
             } else {
                 return {...prev, collectedMushrooms: [...list, id]};
             }
+        });
+    };
+
+    // 新增：批量收集逻辑
+    const handleBatchCollect = (ids: string[]) => {
+        setData(prev => {
+            const currentSet = new Set(prev.collectedMushrooms || []);
+            let hasChange = false;
+            ids.forEach(id => {
+                if (!currentSet.has(id)) {
+                    currentSet.add(id);
+                    hasChange = true;
+                }
+            });
+
+            if (!hasChange) return prev; // 无变化不更新
+
+            return {...prev, collectedMushrooms: Array.from(currentSet)};
         });
     };
 
@@ -158,7 +176,7 @@ function App() {
         }));
     };
 
-    // --- Single Import/Export Handlers ---
+    // --- Import/Export Handlers ---
     const handleExportCurrent = () => {
         const blob = new Blob([JSON.stringify(data)], {type: 'application/json'});
         const a = document.createElement('a');
@@ -207,7 +225,6 @@ function App() {
         reader.readAsText(file);
     };
 
-    // --- Existing Handlers ---
     const updateInventory = (id: string, count: number) => setData(p => ({
         ...p,
         inventory: {...p.inventory, [id]: Math.max(0, count)}
@@ -363,10 +380,11 @@ function App() {
                 </button>
             </div>
 
-            {/* 修改：传递解锁道具列表给图鉴 */}
             {activeTab === 'encyclopedia' ? <Encyclopedia
                 collectedIds={data.collectedMushrooms || []}
                 onToggleCollection={toggleCollection}
+                // 修改：传递新的批量处理函数
+                onBatchCollect={handleBatchCollect}
                 unlockedWoods={data.unlockedWoods}
                 unlockedLights={data.unlockedLights}
                 unlockedHumidifiers={data.unlockedHumidifiers}
