@@ -55,7 +55,7 @@ export const WOOD_INFO: Record<WoodType, { source: string }> = {
 
 export const LIGHT_INFO: Record<LightType, { source: string }> = {
     [Lights.HUO]: {source: '2级'},
-    [Lights.HUN]: {source: ''},
+    [Lights.HUN]: {source: '5级'},
     [Lights.TONG]: {source: '11级'},
     [Lights.YU_RONG]: {source: '白龙2'},
     [Lights.DRAGON]: {source: '白龙3'},
