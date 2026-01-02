@@ -2,10 +2,18 @@
 import { MUSHROOM_DB } from './database';
 import type { HumidifierType, LightType, MushroomDef, TimeType, UserSaveData, WoodType } from './types';
 
-// 新增：缺失物品的结构化定义
+// 缺失物品的结构化定义
 export interface MissingItem {
     type: 'wood' | 'light' | 'humidifier';
     value: string;
+}
+
+// 任务定义（新增 isPassenger 字段）
+export interface PlanTask {
+    mushroom: MushroomDef;
+    countNeeded: number;
+    isPassenger?: boolean; // 标记是否为顺风车（复制过来的任务）
+    originalBatchId?: string; // 标记它原本属于哪个核心批次
 }
 
 // 计划中的每一步（批次）
@@ -13,22 +21,18 @@ export interface PlanBatch {
     id: string; // 唯一key
     env: {
         wood: WoodType;
-        // 以下属性可能是具体的，也可能是 '任意'
         light: LightType | '任意';
         humidifier: HumidifierType | '任意';
         time: TimeType | '任意';
     };
-    tasks: {
-        mushroom: MushroomDef;
-        countNeeded: number;
-    }[];
-    // 修改：存储结构化的缺失信息
+    tasks: PlanTask[];
     missingEquipment: MissingItem[];
+    strictnessScore: number;
+    totalCount: number;
 }
 
 export interface CalculationResult {
     batches: PlanBatch[];
-    // 修改：存储结构化的缺失信息
     missingSummary: MissingItem[];
 }
 
@@ -44,21 +48,32 @@ export function calculateOptimalRoute(userData: UserSaveData): CalculationResult
         });
     });
 
-    // 2. 扣除库存，得到净需求
+    // 2. 扣除库存
     const needToPlant: { mushroom: MushroomDef; countNeeded: number }[] = [];
-
     demandMap.forEach((totalNeeded, id) => {
         const inStock = userData.inventory[id] || 0;
         const netNeeded = totalNeeded - inStock;
         if (netNeeded > 0) {
             const def = MUSHROOM_DB.find(m => m.id === id);
-            if (def) {
-                needToPlant.push({mushroom: def, countNeeded: netNeeded});
-            }
+            if (def) needToPlant.push({mushroom: def, countNeeded: netNeeded});
         }
     });
 
     if (needToPlant.length === 0) return {batches: [], missingSummary: []};
+
+    // 排序：限制多的优先
+    needToPlant.sort((a, b) => {
+        const getScore = (m: MushroomDef) => {
+            let s = 0;
+            if (m.wood) s += 10;
+            if (m.light) s += 5;
+            if (m.humidifier) s += 5;
+            if (m.time) s += 3;
+            if (m.special) s += 1;
+            return s;
+        };
+        return getScore(b.mushroom) - getScore(a.mushroom);
+    });
 
     // 3. 分组算法
     const batches: PlanBatch[] = [];
@@ -76,10 +91,19 @@ export function calculateOptimalRoute(userData: UserSaveData): CalculationResult
                 const batch = batches[i];
                 if (batch.env.wood !== currentWood) continue;
 
-                const isLightCompat = isCompatible(batch.env.light, currentItem.mushroom.light);
-                const isHumidCompat = isCompatible(batch.env.humidifier, currentItem.mushroom.humidifier);
+                // --- 修改点1：不再进行贪婪合并，只有严格匹配才合并 ---
+                // 只有当批次环境设定与菌种需求一致（都是Specific或都是Any）时才合并
+                // 这样可以确保宽松的菌种会建立自己独立的宽松批次
+                const isStrictMatch = (batchVal: string | '任意', itemVal: string | undefined) => {
+                    const b = batchVal === '任意' ? undefined : batchVal;
+                    return b === itemVal;
+                };
 
-                if (isLightCompat && isHumidCompat) {
+                const match = isStrictMatch(batch.env.light, currentItem.mushroom.light) &&
+                    isStrictMatch(batch.env.humidifier, currentItem.mushroom.humidifier) &&
+                    isStrictMatch(batch.env.time, currentItem.mushroom.time);
+
+                if (match) {
                     bestBatchIndex = i;
                     break;
                 }
@@ -87,9 +111,8 @@ export function calculateOptimalRoute(userData: UserSaveData): CalculationResult
 
             if (bestBatchIndex !== -1) {
                 const batch = batches[bestBatchIndex];
-                batch.tasks.push(currentItem);
-                batch.env.light = resolveConstraint(batch.env.light, currentItem.mushroom.light);
-                batch.env.humidifier = resolveConstraint(batch.env.humidifier, currentItem.mushroom.humidifier);
+                batch.tasks.push({...currentItem, isPassenger: false});
+                batch.totalCount += currentItem.countNeeded;
             } else {
                 batches.push({
                     id: `${currentWood}-${Date.now()}-${Math.random()}`,
@@ -97,48 +120,88 @@ export function calculateOptimalRoute(userData: UserSaveData): CalculationResult
                         wood: currentWood,
                         light: currentItem.mushroom.light || '任意',
                         humidifier: currentItem.mushroom.humidifier || '任意',
-                        time: '任意',
+                        time: currentItem.mushroom.time || '任意',
                     },
-                    tasks: [currentItem],
-                    missingEquipment: []
+                    tasks: [{...currentItem, isPassenger: false}],
+                    missingEquipment: [],
+                    strictnessScore: 0,
+                    totalCount: currentItem.countNeeded
                 });
             }
         }
     }
 
-    // 4. 计算缺失设备 (更新逻辑)
-    // 使用 Map 进行去重，Key 为 "type-value"
+    // 4. 计算属性 + 注入顺风车逻辑
     const allMissingMap = new Map<string, MissingItem>();
 
     batches.forEach(batch => {
-        const missing: MissingItem[] = [];
+        let score = 0;
+        if (batch.env.wood) score += 1;
+        if (batch.env.light !== '任意') score += 1;
+        if (batch.env.humidifier !== '任意') score += 1;
+        if (batch.env.time !== '任意') score += 1;
+        batch.strictnessScore = score;
 
-        // 检查木头
+        // 缺失设备逻辑
         if (!userData.unlockedWoods.includes(batch.env.wood)) {
             const item: MissingItem = {type: 'wood', value: batch.env.wood};
-            missing.push(item);
             allMissingMap.set(`wood-${batch.env.wood}`, item);
+            batch.missingEquipment.push(item);
         }
+        if (batch.env.light !== '任意' && !userData.unlockedLights.includes(batch.env.light)) {
+            const item: MissingItem = {type: 'light', value: batch.env.light};
+            allMissingMap.set(`light-${batch.env.light}`, item);
+            batch.missingEquipment.push(item);
+        }
+        if (batch.env.humidifier !== '任意' && !userData.unlockedHumidifiers.includes(batch.env.humidifier)) {
+            const item: MissingItem = {type: 'humidifier', value: batch.env.humidifier};
+            allMissingMap.set(`humidifier-${batch.env.humidifier}`, item);
+            batch.missingEquipment.push(item);
+        }
+    });
 
-        // 检查灯
-        if (batch.env.light !== '任意') {
-            if (!userData.unlockedLights.includes(batch.env.light)) {
-                const item: MissingItem = {type: 'light', value: batch.env.light};
-                missing.push(item);
-                allMissingMap.set(`light-${batch.env.light}`, item);
+    // --- 修改点2：交叉注入顺风车 ---
+    // 遍历所有批次对，如果 Target 比 Source 严格且兼容，则把 Source 的任务作为“顺风车”显示在 Target 里
+    batches.forEach(targetBatch => {
+        batches.forEach(sourceBatch => {
+            if (targetBatch === sourceBatch) return;
+            if (targetBatch.env.wood !== sourceBatch.env.wood) return;
+
+            // 只有当目标批次比源批次更严格（或至少环境包含了源批次的要求）时才注入
+            // 简单判断：目标的环境能满足源批次里所有任务吗？
+            // 因为我们在第1步已经按属性严格分组了，所以只要源批次是“任意”，目标是“具体”，就满足
+            const isCompatible = (targetVal: string | '任意', sourceVal: string | '任意') => {
+                if (sourceVal === '任意') return true; // 源是任意，目标是啥都行
+                return targetVal === sourceVal; // 源是具体，目标必须一致
+            };
+
+            const compatible = isCompatible(targetBatch.env.light, sourceBatch.env.light) &&
+                isCompatible(targetBatch.env.humidifier, sourceBatch.env.humidifier) &&
+                isCompatible(targetBatch.env.time, sourceBatch.env.time);
+
+            // 且必须是不同严格度的，避免相同批次互指（虽然Step1应该避免了相同批次）
+            // 或者是 Target 严格度 > Source 严格度
+            if (compatible && targetBatch.strictnessScore > sourceBatch.strictnessScore) {
+                sourceBatch.tasks.forEach(task => {
+                    // 防止重复添加
+                    if (!targetBatch.tasks.find(t => t.mushroom.id === task.mushroom.id && t.isPassenger)) {
+                        targetBatch.tasks.push({
+                            ...task,
+                            isPassenger: true,
+                            originalBatchId: sourceBatch.id
+                        });
+                    }
+                });
             }
-        }
+        });
+    });
 
-        // 检查加湿器
-        if (batch.env.humidifier !== '任意') {
-            if (!userData.unlockedHumidifiers.includes(batch.env.humidifier)) {
-                const item: MissingItem = {type: 'humidifier', value: batch.env.humidifier};
-                missing.push(item);
-                allMissingMap.set(`humidifier-${batch.env.humidifier}`, item);
-            }
+    // 5. 排序
+    batches.sort((a, b) => {
+        if (b.strictnessScore !== a.strictnessScore) {
+            return b.strictnessScore - a.strictnessScore; // 严格的在前
         }
-
-        batch.missingEquipment = missing;
+        return b.totalCount - a.totalCount;
     });
 
     return {
@@ -147,8 +210,7 @@ export function calculateOptimalRoute(userData: UserSaveData): CalculationResult
     };
 }
 
-// --- 辅助函数 ---
-
+// ... helper functions (groupBy etc)
 function groupBy<T>(array: T[], keyFn: (item: T) => string): Record<string, T[]> {
     return array.reduce((acc, item) => {
         const key = keyFn(item);
@@ -156,16 +218,4 @@ function groupBy<T>(array: T[], keyFn: (item: T) => string): Record<string, T[]>
         acc[key].push(item);
         return acc;
     }, {} as Record<string, T[]>);
-}
-
-function isCompatible(envProp: string | undefined | '任意', itemProp: string | undefined) {
-    if (envProp === '任意' || envProp === undefined) return true;
-    if (itemProp === undefined) return true;
-    return envProp === itemProp;
-}
-
-function resolveConstraint(current: string | undefined | '任意', incoming: string | undefined): any {
-    if (current !== '任意' && current !== undefined) return current;
-    if (incoming !== undefined) return incoming;
-    return '任意';
 }

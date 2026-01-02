@@ -1,6 +1,7 @@
-import React from 'react';
+// src/components/PlanPanel.tsx
+import React, { useMemo } from 'react';
 import { MUSHROOM_CHILDREN } from '../database';
-import type { CalculationResult } from '../logic';
+import type { CalculationResult, PlanBatch } from '../logic';
 import { TimeRanges } from '../types';
 import { getChildImg, getMushroomImg, getSourceInfo, getToolIcon, TOOL_INFO } from '../utils';
 import { btnStyle, CollapsibleSection, EnvBadge, MiniImg } from './Common';
@@ -11,70 +12,259 @@ interface PlanPanelProps {
 }
 
 export const PlanPanel: React.FC<PlanPanelProps> = ({plan: {batches, missingSummary}, onRefresh}) => {
-    const renderTaskGrid = (tasks: typeof batches[0]['tasks']) => (
-        <div className="plan-grid">
-            {tasks.map((task, tIdx) => (
-                <div key={tIdx} style={{
-                    border: '1px solid #eee',
-                    borderRadius: 8,
-                    padding: 12,
-                    background: '#fff',
-                    boxShadow: '0 2px 5px rgba(0,0,0,0.03)'
-                }}>
-                    <div style={{display: 'flex', gap: 12, marginBottom: 10}}>
-                        <MiniImg src={getMushroomImg(task.mushroom.id)} label={task.mushroom.name} size={48}/>
-                        <div style={{flex: 1}}>
-                            <div style={{fontWeight: 'bold', fontSize: 15}}>{task.mushroom.name}</div>
-                            <div style={{fontSize: 12, color: '#666'}}>需培育: <span
-                                style={{color: '#d32f2f', fontWeight: 'bold'}}>{task.countNeeded}</span> 个
-                            </div>
-                        </div>
+
+    const hasStrictDay = batches.some(b => b.env.time === TimeRanges.DAY);
+    const hasStrictNight = batches.some(b => b.env.time === TimeRanges.NIGHT);
+    const showSplitLayout = hasStrictDay && hasStrictNight;
+
+    const dayBatches = showSplitLayout ? batches.filter(b => b.env.time === TimeRanges.DAY || b.env.time === '任意') : [];
+    const nightBatches = showSplitLayout ? batches.filter(b => b.env.time === TimeRanges.NIGHT || b.env.time === '任意') : [];
+
+    // 创建 ID 到 序号 的映射，用于显示 "见第X批"
+    const batchIndexMap = useMemo(() => {
+        const map = new Map<string, number>();
+        batches.forEach((b, i) => map.set(b.id, i + 1));
+        return map;
+    }, [batches]);
+
+    const getSinglePanelConfig = () => {
+        if (hasStrictDay) return {
+            title: '☀️ 白天场', sub: '(包含时间任意的批次)',
+            bg: '#fff8e1', border: '#ffecb3', titleColor: '#f57f17'
+        };
+        if (hasStrictNight) return {
+            title: '🌙 夜晚场', sub: '(包含时间任意的批次)',
+            bg: '#e8eaf6', border: '#c5cae9', titleColor: '#3949ab'
+        };
+        return {
+            title: '🕒 自由时间', sub: '(所有批次时间均不限)',
+            bg: '#eceff1', border: '#cfd8dc', titleColor: '#455a64'
+        };
+    };
+
+    const renderBatch = (batch: PlanBatch, _: number, isFlexibleTime: boolean) => {
+        // --- 修改：分开统计核心道具和顺风车道具 ---
+        const batchTools: Record<string, number> = {};
+        const passengerTools: Record<string, number> = {};
+
+        batch.tasks.forEach(t => {
+            if (t.mushroom.special && t.mushroom.save) {
+                const condition = t.mushroom.special;
+                if (TOOL_INFO[condition]) {
+                    if (t.isPassenger) {
+                        passengerTools[condition] = (passengerTools[condition] || 0) + t.countNeeded;
+                    } else {
+                        batchTools[condition] = (batchTools[condition] || 0) + t.countNeeded;
+                    }
+                }
+            }
+        });
+
+        // 排序：核心任务在前，顺风车在后
+        const sortedTasks = [...batch.tasks].sort((a, b) => {
+            if (a.isPassenger === b.isPassenger) return 0;
+            return a.isPassenger ? 1 : -1;
+        });
+
+        return (
+            <CollapsibleSection
+                key={batch.id} defaultOpen={true}
+                title={
+                    <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
+                        <span>第{batchIndexMap.get(batch.id)}批: {batch.env.wood}</span>
+                        {isFlexibleTime && <span style={{
+                            fontSize: 11,
+                            background: '#e0f7fa',
+                            color: '#006064',
+                            padding: '1px 5px',
+                            borderRadius: 4
+                        }}>🕒 时间任意</span>}
                     </div>
-                    <hr style={{border: 0, borderTop: '1px dashed #eee', margin: '8px 0'}}/>
-                    <div style={{fontSize: 12, color: '#555', display: 'flex', flexDirection: 'column', gap: 6}}>
-                        <div style={{display: 'flex', alignItems: 'center', gap: 6}}>
-                            <span>起始:</span>
-                            <MiniImg src={getChildImg(task.mushroom.starter, task.mushroom.special)}
-                                     label={task.mushroom.starter} size={40} circle/>
-                            <span>{MUSHROOM_CHILDREN[task.mushroom.starter].name}</span>
-                        </div>
-                        {task.mushroom.special && (
-                            <div style={{display: 'flex', alignItems: 'center', gap: 6}}>
-                                <span>特殊:</span>
-                                <span style={{
-                                    background: '#fff3e0',
-                                    color: '#ef6c00',
-                                    padding: '1px 5px',
-                                    borderRadius: 3,
-                                    border: '1px solid #ffe0b2'
-                                }}>{task.mushroom.special}</span>
-                                <span>➜</span>
-                                {task.mushroom.save ? (
-                                    <div style={{display: 'flex', alignItems: 'center', gap: 4, color: '#2e7d32'}}>
-                                        <strong>救助</strong>
-                                        {TOOL_INFO[task.mushroom.special] && (
-                                            <div style={{
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: 2,
-                                                fontSize: 11,
-                                                background: '#e8f5e9',
-                                                padding: '1px 4px',
-                                                borderRadius: 4
-                                            }}>
-                                                <span>(</span><MiniImg src={TOOL_INFO[task.mushroom.special].img}
-                                                                       size={14}/><span>{TOOL_INFO[task.mushroom.special].name})</span>
-                                            </div>
-                                        )}
-                                    </div>
-                                ) : <strong style={{color: '#c62828'}}>不救</strong>}
-                            </div>
+                }
+                headerBg={batch.missingEquipment.length > 0 ? '#fff3e0' : (isFlexibleTime ? '#f0f4c3' : '#f1f8e9')}
+                headerColor={batch.missingEquipment.length > 0 ? '#e65100' : '#33691e'}
+            >
+                {/* 环境详情 */}
+                <div style={{
+                    display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 15, fontSize: 13,
+                    background: '#fafafa', padding: 10, borderRadius: 6
+                }}>
+                    <div style={{display: 'flex', flexWrap: 'wrap', gap: 15}}>
+                        <EnvBadge label="木头" value={batch.env.wood} icon="🪵"/>
+                        <EnvBadge label="日照" value={batch.env.light} icon="💡"/>
+                        <EnvBadge label="补水" value={batch.env.humidifier} icon="💧"/>
+                        {batch.missingEquipment.length > 0 && <div style={{
+                            color: 'red',
+                            fontWeight: 'bold',
+                            marginLeft: 'auto'
+                        }}>缺: {batch.missingEquipment.map(m => m.value).join(', ')}</div>}
+                    </div>
+
+                    {/* 核心道具展示 */}
+                    <div style={{
+                        borderTop: '1px dashed #eee',
+                        paddingTop: 8,
+                        marginTop: 4,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 15,
+                        flexWrap: 'wrap'
+                    }}>
+                        <span style={{color: '#666', fontWeight: 'bold'}}>🩹 核心目标需:</span>
+                        {Object.keys(batchTools).length === 0 ? <span style={{color: '#aaa'}}>无</span> : (
+                            Object.entries(batchTools).map(([cond, count]) => (
+                                <div key={cond} style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 6,
+                                    background: '#fff',
+                                    padding: '2px 8px',
+                                    borderRadius: 4,
+                                    border: '1px solid #eee'
+                                }}>
+                                    <MiniImg src={TOOL_INFO[cond].img} size={18} circle/><span>{TOOL_INFO[cond].name}
+                                    <strong style={{color: '#d32f2f'}}>x{count}</strong></span>
+                                </div>
+                            ))
                         )}
                     </div>
+
+                    {/* --- 新增：顺风车道具展示 (样式淡化) --- */}
+                    {Object.keys(passengerTools).length > 0 && (
+                        <div style={{
+                            // borderTop: '1px dashed #eee', // 可选：如果觉得太挤可以加分隔线
+                            // paddingTop: 4,
+                            marginTop: -2, // 稍微拉近一点距离
+                            display: 'flex', alignItems: 'center', gap: 15, flexWrap: 'wrap',
+                            opacity: 0.8 // 整体半透明
+                        }}>
+                            <span style={{color: '#999', fontSize: 12}}>🚌 顺风车需:</span>
+                            {Object.entries(passengerTools).map(([cond, count]) => (
+                                <div key={cond} style={{
+                                    display: 'flex', alignItems: 'center', gap: 4,
+                                    background: '#f9f9f9', // 浅灰背景
+                                    padding: '1px 6px', borderRadius: 4,
+                                    border: '1px solid #e0e0e0', // 浅灰边框
+                                    fontSize: 12
+                                }}>
+                                    <MiniImg src={TOOL_INFO[cond].img} size={14} circle/> {/* 更小的图标 */}
+                                    <span style={{color: '#888'}}>{TOOL_INFO[cond].name} <span
+                                        style={{fontSize: 11}}>x{count}</span></span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
-            ))}
-        </div>
-    );
+
+                {/* 任务列表 */}
+                <div className="plan-grid">
+                    {sortedTasks.map((task, tIdx) => {
+                        const isPassenger = !!task.isPassenger;
+                        const originalIdx = task.originalBatchId ? batchIndexMap.get(task.originalBatchId) : null;
+
+                        return (
+                            <div key={tIdx} style={{
+                                border: isPassenger ? '1px dashed #ccc' : '1px solid #eee',
+                                borderRadius: 8, padding: 12,
+                                background: isPassenger ? '#f9f9f9' : '#fff',
+                                boxShadow: isPassenger ? 'none' : '0 2px 5px rgba(0,0,0,0.03)',
+                                position: 'relative', overflow: 'hidden', opacity: isPassenger ? 0.9 : 1
+                            }}>
+                                <div style={{
+                                    position: 'absolute', top: 5, right: 5, fontSize: 11,
+                                    padding: '2px 6px', borderRadius: 4,
+                                    background: isPassenger ? '#eeeeee' : '#fce4ec',
+                                    color: isPassenger ? '#666' : '#c2185b',
+                                    border: isPassenger ? '1px solid #ddd' : '1px solid #f8bbd0'
+                                }}>
+                                    {isPassenger ? `🚌 顺风车 (主战场: 第${originalIdx}批)` : '🎯 核心目标'}
+                                </div>
+
+                                <div style={{display: 'flex', gap: 12, marginBottom: 10, marginTop: 5}}>
+                                    <MiniImg src={getMushroomImg(task.mushroom.id)} label={task.mushroom.name} size={48}
+                                             color={isPassenger ? '#eee' : '#f5f5f5'}/>
+                                    <div style={{flex: 1}}>
+                                        <div style={{
+                                            fontWeight: 'bold',
+                                            fontSize: 15,
+                                            color: isPassenger ? '#555' : '#000'
+                                        }}>{task.mushroom.name}</div>
+                                        <div style={{fontSize: 12, color: '#666'}}>
+                                            {isPassenger ? '可蹭: ' : '需培育: '}
+                                            <span style={{
+                                                color: isPassenger ? '#666' : '#d32f2f',
+                                                fontWeight: 'bold'
+                                            }}>{task.countNeeded}</span> 个
+                                        </div>
+                                    </div>
+                                </div>
+                                <hr style={{border: 0, borderTop: '1px dashed #eee', margin: '8px 0'}}/>
+                                <div style={{
+                                    fontSize: 12,
+                                    color: '#555',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: 6
+                                }}>
+                                    <div style={{display: 'flex', alignItems: 'center', gap: 6}}>
+                                        <span>起始:</span>
+                                        <MiniImg src={getChildImg(task.mushroom.starter, task.mushroom.special)}
+                                                 label={task.mushroom.starter} size={25} circle/>
+                                        <span>{MUSHROOM_CHILDREN[task.mushroom.starter]}</span>
+                                    </div>
+                                    {task.mushroom.special && (
+                                        <div style={{marginTop: 5, display: 'flex', flexDirection: 'column', gap: 5}}>
+                                            <div style={{display: 'flex', alignItems: 'center', gap: 6}}>
+                                                <span style={{color: '#888'}}>环境:</span>
+                                                <span style={{
+                                                    background: '#fff3e0',
+                                                    color: '#ef6c00',
+                                                    padding: '1px 5px',
+                                                    borderRadius: 3,
+                                                    border: '1px solid #ffe0b2'
+                                                }}>
+                                                    {task.mushroom.special}
+                                                </span>
+                                            </div>
+                                            <div style={{display: 'flex', alignItems: 'center', gap: 6}}>
+                                                <span style={{color: '#888'}}>策略:</span>
+                                                {task.mushroom.save ? (
+                                                    <div style={{display: 'flex', alignItems: 'center', gap: 5}}>
+                                                        <span
+                                                            style={{color: '#2e7d32', fontWeight: 'bold'}}>✅ 救助</span>
+                                                        {TOOL_INFO[task.mushroom.special] && (
+                                                            <div style={{
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                gap: 3,
+                                                                background: '#f1f8e9',
+                                                                padding: '1px 6px',
+                                                                borderRadius: 10,
+                                                                border: '1px solid #c8e6c9',
+                                                                fontSize: 11
+                                                            }}>
+                                                                <MiniImg src={TOOL_INFO[task.mushroom.special].img}
+                                                                         size={14} circle/>
+                                                                <span
+                                                                    style={{color: '#33691e'}}>{TOOL_INFO[task.mushroom.special].name}</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ) : (<span style={{
+                                                    color: '#c62828',
+                                                    fontWeight: 'bold'
+                                                }}>❌ 不救 (变异)</span>)}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </CollapsibleSection>
+        );
+    };
 
     return (
         <div style={{background: '#fcfcfc', borderRadius: 8, border: '1px solid #e0e0e0', minHeight: 600}}>
@@ -128,130 +318,79 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({plan: {batches, missingSumm
                         <div style={{fontSize: 40, marginBottom: 10}}>🎉</div>
                         需求满足</div>
                 ) : (
-                    batches.map((batch, idx) => {
-                        const batchTools: Record<string, number> = {};
-                        const timeGroups = {
-                            [TimeRanges.DAY]: [] as typeof batch.tasks,
-                            [TimeRanges.NIGHT]: [] as typeof batch.tasks,
-                            'any': [] as typeof batch.tasks
-                        };
-                        batch.tasks.forEach(t => {
-                            if (t.mushroom.special && t.mushroom.save) {
-                                const condition = t.mushroom.special;
-                                if (TOOL_INFO[condition]) batchTools[condition] = (batchTools[condition] || 0) + t.countNeeded;
-                            }
-                            if (t.mushroom.time === TimeRanges.DAY) timeGroups[TimeRanges.DAY].push(t);
-                            else if (t.mushroom.time === TimeRanges.NIGHT) timeGroups[TimeRanges.NIGHT].push(t);
-                            else timeGroups['any'].push(t);
-                        });
-                        return (
-                            <CollapsibleSection
-                                key={batch.id} defaultOpen={true}
-                                title={`第${idx + 1}批: ${batch.env.wood} - ${batch.env.light} - ${batch.env.humidifier}`}
-                                headerBg={batch.missingEquipment.length > 0 ? '#fff3e0' : '#f1f8e9'}
-                                headerColor={batch.missingEquipment.length > 0 ? '#e65100' : '#33691e'}
-                            >
+                    <div style={{display: 'flex', flexDirection: 'column', gap: 30}}>
+                        {showSplitLayout ? (
+                            <>
                                 <div style={{
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    gap: 10,
-                                    marginBottom: 15,
-                                    fontSize: 13,
-                                    background: '#fafafa',
-                                    padding: 10,
-                                    borderRadius: 6
+                                    background: '#fff8e1',
+                                    padding: 15,
+                                    borderRadius: 8,
+                                    border: '1px solid #ffecb3'
                                 }}>
-                                    <div style={{display: 'flex', flexWrap: 'wrap', gap: 15}}>
-                                        <EnvBadge label="木头" value={batch.env.wood} icon="🪵"/><EnvBadge label="日照"
-                                                                                                          value={batch.env.light}
-                                                                                                          icon="💡"/><EnvBadge
-                                        label="补水" value={batch.env.humidifier} icon="💧"/>
-                                        {batch.missingEquipment.length > 0 && <div style={{
-                                            color: 'red',
-                                            fontWeight: 'bold',
-                                            marginLeft: 'auto'
-                                        }}>缺: {batch.missingEquipment.map(m => m.value).join(', ')}</div>}
-                                    </div>
-                                    <div style={{
-                                        borderTop: '1px dashed #eee',
-                                        paddingTop: 8,
-                                        marginTop: 4,
+                                    <h3 style={{
+                                        marginTop: 0,
+                                        color: '#f57f17',
                                         display: 'flex',
                                         alignItems: 'center',
-                                        gap: 15,
-                                        flexWrap: 'wrap'
+                                        gap: 8
+                                    }}>☀️ 白天场 <span style={{
+                                        fontSize: 13,
+                                        fontWeight: 'normal',
+                                        color: '#888'
+                                    }}>(含时间任意的批次)</span></h3>
+                                    {dayBatches.length === 0 &&
+                                        <div style={{color: '#999', fontSize: 13}}>无白天任务</div>}
+                                    {dayBatches.map((batch, i) => renderBatch(batch, i, batch.env.time === '任意'))}
+                                </div>
+                                <div style={{
+                                    background: '#e8eaf6',
+                                    padding: 15,
+                                    borderRadius: 8,
+                                    border: '1px solid #c5cae9'
+                                }}>
+                                    <h3 style={{
+                                        marginTop: 0,
+                                        color: '#3949ab',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 8
+                                    }}>🌙 夜晚场 <span style={{
+                                        fontSize: 13,
+                                        fontWeight: 'normal',
+                                        color: '#888'
+                                    }}>(含时间任意的批次)</span></h3>
+                                    {nightBatches.length === 0 &&
+                                        <div style={{color: '#999', fontSize: 13}}>无夜晚任务</div>}
+                                    {nightBatches.map((batch, i) => renderBatch(batch, i, batch.env.time === '任意'))}
+                                </div>
+                            </>
+                        ) : (
+                            (() => {
+                                const config = getSinglePanelConfig();
+                                return (
+                                    <div style={{
+                                        background: config.bg,
+                                        padding: 15,
+                                        borderRadius: 8,
+                                        border: `1px solid ${config.border}`
                                     }}>
-                                        <span style={{color: '#666', fontWeight: 'bold'}}>🩹 所需救助道具:</span>
-                                        {Object.keys(batchTools).length === 0 ?
-                                            <span style={{color: '#aaa'}}>无</span> : (
-                                                Object.entries(batchTools).map(([cond, count]) => (
-                                                    <div key={cond} style={{
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: 6,
-                                                        background: '#fff',
-                                                        padding: '2px 8px',
-                                                        borderRadius: 4,
-                                                        border: '1px solid #eee'
-                                                    }}>
-                                                        <MiniImg src={TOOL_INFO[cond].img} size={18}
-                                                                 circle/><span>{TOOL_INFO[cond].name} <strong
-                                                        style={{color: '#d32f2f'}}>x{count}</strong></span>
-                                                    </div>
-                                                ))
-                                            )}
+                                        <h3 style={{
+                                            marginTop: 0,
+                                            color: config.titleColor,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 8
+                                        }}>{config.title} <span style={{
+                                            fontSize: 13,
+                                            fontWeight: 'normal',
+                                            color: '#888'
+                                        }}>{config.sub}</span></h3>
+                                        {batches.map((batch, i) => renderBatch(batch, i, batch.env.time === '任意'))}
                                     </div>
-                                </div>
-                                <div style={{display: 'flex', flexDirection: 'column', gap: 20}}>
-                                    {timeGroups[TimeRanges.DAY].length > 0 && <div>
-                                        <div style={{
-                                            fontSize: 14,
-                                            fontWeight: 'bold',
-                                            marginBottom: 8,
-                                            color: '#e65100',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: 5
-                                        }}><span>☀️ 白天生长</span><span style={{
-                                            fontSize: 12,
-                                            fontWeight: 'normal',
-                                            color: '#888'
-                                        }}>({timeGroups[TimeRanges.DAY].length})</span></div>
-                                        {renderTaskGrid(timeGroups[TimeRanges.DAY])}</div>}
-                                    {timeGroups[TimeRanges.NIGHT].length > 0 && <div>
-                                        <div style={{
-                                            fontSize: 14,
-                                            fontWeight: 'bold',
-                                            marginBottom: 8,
-                                            color: '#311b92',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: 5
-                                        }}><span>🌙 黑夜生长</span><span style={{
-                                            fontSize: 12,
-                                            fontWeight: 'normal',
-                                            color: '#888'
-                                        }}>({timeGroups[TimeRanges.NIGHT].length})</span></div>
-                                        {renderTaskGrid(timeGroups[TimeRanges.NIGHT])}</div>}
-                                    {timeGroups['any'].length > 0 && <div>
-                                        <div style={{
-                                            fontSize: 14,
-                                            fontWeight: 'bold',
-                                            marginBottom: 8,
-                                            color: '#455a64',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: 5
-                                        }}><span>🕒 时间不限</span><span style={{
-                                            fontSize: 12,
-                                            fontWeight: 'normal',
-                                            color: '#888'
-                                        }}>({timeGroups['any'].length})</span></div>
-                                        {renderTaskGrid(timeGroups['any'])}</div>}
-                                </div>
-                            </CollapsibleSection>
-                        );
-                    })
+                                );
+                            })()
+                        )}
+                    </div>
                 )}
             </div>
         </div>

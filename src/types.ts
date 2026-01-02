@@ -7,28 +7,54 @@ export const MushroomChildIds = {
     MAO: 'mao',
     PAO: 'pao',
     SHAN_HU: 'shanhu',
+    LABA: 'laba',
+    DI: 'di',
+    DEER: 'deer',
+    CAI: 'cai',
+    GHOST: 'ghost',
     NIAO: 'niao',
+    LING: 'ling',
+    ZHU: 'zhu',
+    RUBY: 'ruby',
+    HOU: 'hou',
 } as const;
 export type MushroomChildId = typeof MushroomChildIds[keyof typeof MushroomChildIds];
 
 
 export const Woods = {
-    BO_MU: '柏木',
+    BAI: '柏木',
+    FENG: '枫木',
+    SONG: '松木',
+    CHANG_CHUN: '常春',
+    GE_TENG: '葛藤',
+    JIAN_CI: '尖刺',
+    JIAN_JING: '尖晶',
+    LV_SONG: '绿松',
+    GOLD: '黄金',
+    LOVE: '爱心',
     QIAN_NIU: '牵牛',
-    FENG_MU: '枫木',
-    CHANG: '常春',
+    QING: '青金',
+    YAN: '岩溶',
+    MING: '名琴',
+    SHU: '书案',
 } as const;
 export type WoodType = typeof Woods[keyof typeof Woods];
 
 export const Lights = {
     HUO: '火炬',
+    HUN: '魂魂',
+    TONG: '铜盏',
     YU_RONG: '羽绒',
+    DRAGON: '白龙',
 } as const;
 export type LightType = typeof Lights[keyof typeof Lights];
 
 export const Humidifiers = {
     ZHU: '竹筒',
+    LIAN: '莲蓬',
+    TAO: '陶滴壶',
     NIAO: '小鸟',
+    BLUE: '深蓝',
 } as const;
 export type HumidifierType = typeof Humidifiers[keyof typeof Humidifiers];
 
@@ -47,12 +73,6 @@ export type SpecialConditionType = typeof SpecialConditions[keyof typeof Special
 
 
 // --- 2. 核心数据模型 ---
-export interface MushroomChild {
-    id: MushroomChildId;
-    name: string;
-}
-
-
 // 菌种定义 (数据库行)
 export interface MushroomDef {
     id: string;
