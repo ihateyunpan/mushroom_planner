@@ -1,5 +1,5 @@
 // src/App.tsx
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { Suspense, useEffect, useMemo, useState } from 'react';
 import { MUSHROOM_DB } from './database';
 import { calculateOptimalRoute, type PlanTask } from './logic';
 import type { GlobalStorage, MushroomDef, UserSaveData } from './types';
@@ -8,11 +8,16 @@ import './App.css';
 
 // 引入拆分后的组件
 import { Header } from './components/Header';
-import { Encyclopedia } from './components/Encyclopedia';
 import { EquipmentPanel } from './components/EquipmentPanel';
 import { InventoryPanel } from './components/InventoryPanel';
 import { OrderPanel } from './components/OrderPanel';
 import { PlanPanel } from './components/PlanPanel';
+
+// --- 优化：Lazy Loading 图鉴组件 ---
+// 只有切换到图鉴 Tab 时，才会加载这个组件的代码
+const Encyclopedia = React.lazy(() =>
+    import('./components/Encyclopedia').then(module => ({default: module.Encyclopedia}))
+);
 
 const SAFE_INITIAL_DATA: UserSaveData = {
     orders: [],
@@ -26,6 +31,22 @@ const SAFE_INITIAL_DATA: UserSaveData = {
 const OLD_STORAGE_KEY = 'MUSHROOM_HELPER_DATA_V1';
 const STORAGE_KEY = 'MUSHROOM_HELPER_GLOBAL_V2';
 const TAB_STORAGE_KEY = 'MUSHROOM_HELPER_ACTIVE_TAB';
+
+// --- 简单的 Loading 组件 ---
+const LoadingSpinner = () => (
+    <div style={{
+        padding: '40px',
+        textAlign: 'center',
+        color: '#666',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: '10px'
+    }}>
+        <div style={{fontSize: '24px'}}>🍄</div>
+        <div>正在加载图鉴...</div>
+    </div>
+);
 
 function App() {
     // --- Global State ---
@@ -226,7 +247,6 @@ function App() {
         inventory: {...p.inventory, [id]: Math.max(0, count)}
     }));
 
-    // 新增：库存+1
     const handleAddOne = (id: string) => {
         setData(p => ({
             ...p,
@@ -431,14 +451,19 @@ function App() {
                 </button>
             </div>
 
-            {activeTab === 'encyclopedia' ? <Encyclopedia
-                collectedIds={data.collectedMushrooms || []}
-                onToggleCollection={toggleCollection}
-                onBatchCollect={handleBatchCollect}
-                unlockedWoods={data.unlockedWoods}
-                unlockedLights={data.unlockedLights}
-                unlockedHumidifiers={data.unlockedHumidifiers}
-            /> : (
+            {/* 修改：使用 Suspense 包裹 lazy 组件 */}
+            {activeTab === 'encyclopedia' ? (
+                <Suspense fallback={<LoadingSpinner/>}>
+                    <Encyclopedia
+                        collectedIds={data.collectedMushrooms || []}
+                        onToggleCollection={toggleCollection}
+                        onBatchCollect={handleBatchCollect}
+                        unlockedWoods={data.unlockedWoods}
+                        unlockedLights={data.unlockedLights}
+                        unlockedHumidifiers={data.unlockedHumidifiers}
+                    />
+                </Suspense>
+            ) : (
                 <div className="main-layout">
                     <div style={{display: 'flex', flexDirection: 'column', gap: 10}}>
                         <EquipmentPanel unlockedWoods={data.unlockedWoods} unlockedLights={data.unlockedLights}
@@ -467,7 +492,6 @@ function App() {
                         plan={calculationResult}
                         onCompleteTask={handleCompleteTask}
                         onRefresh={() => setPlanVersion(v => v + 1)}
-                        // 修改：传递新数据
                         orders={data.orders}
                         inventory={data.inventory}
                         onAddOne={handleAddOne}

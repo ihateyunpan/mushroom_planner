@@ -1,7 +1,7 @@
 // src/components/Encyclopedia.tsx
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { MUSHROOM_CHILDREN, MUSHROOM_DB } from '../database';
-import type { HumidifierType, LightType, WoodType } from '../types';
+import type { HumidifierType, LightType, MushroomDef, WoodType } from '../types';
 import { Humidifiers, Lights, MushroomChildIds, SpecialConditions, TimeRanges, Woods } from '../types';
 import { getChildImg, getMushroomImg, TOOL_INFO } from '../utils';
 import { CollapsibleSection, EnvBadge, MiniImg } from './Common';
@@ -30,10 +30,125 @@ const getSpecialStyle = (special: string) => {
     }
 };
 
+// --- 子组件：单个菌种卡片 ---
+// 提取出来以便复用
+const MushroomCardItem: React.FC<{
+    m: MushroomDef;
+    isCollected: boolean;
+    onToggle: (id: string) => void;
+    unlockedWoods: WoodType[];
+    unlockedLights: LightType[];
+    unlockedHumidifiers: HumidifierType[];
+}> = ({m, isCollected, onToggle}) => {
+    return (
+        <div
+            style={{
+                border: isCollected ? '2px solid #81c784' : '2px dashed #ffb74d',
+                borderRadius: 8, padding: 15,
+                background: isCollected ? '#fff' : '#fff8e1',
+                boxShadow: isCollected ? '0 2px 8px rgba(76, 175, 80, 0.2)' : '0 2px 5px rgba(0,0,0,0.05)',
+                display: 'flex', flexDirection: 'column', gap: 10,
+                cursor: 'default',
+                position: 'relative', transition: 'all 0.2s',
+                opacity: 1
+            }}
+        >
+            {/* 点击图标切换收集状态 (防误触优化) */}
+            <div
+                onClick={(e) => {
+                    e.stopPropagation();
+                    onToggle(m.id);
+                }}
+                style={{
+                    position: 'absolute', top: 0, right: 0,
+                    fontSize: 20, zIndex: 1,
+                    cursor: 'pointer',
+                    padding: '10px 15px',
+                }}
+                title={isCollected ? "点击取消收集" : "点击标记为已收集"}
+            >
+                {isCollected ? '✅' : <span style={{opacity: 0.3, filter: 'grayscale(100%)'}}>⬜</span>}
+            </div>
+
+            <div style={{display: 'flex', gap: 12}}>
+                <MiniImg src={getMushroomImg(m.id)} label={m.name} size={50}/>
+                <div>
+                    <div style={{
+                        fontWeight: 'bold', fontSize: 15,
+                        color: isCollected ? '#333' : '#e65100'
+                    }}>{m.name}</div>
+                    <div style={{fontSize: 12, color: '#999', marginTop: 4}}>ID: {m.id}</div>
+                    {!isCollected &&
+                        <div style={{fontSize: 11, color: '#e65100', marginTop: 2, fontWeight: 'bold'}}>未收集</div>}
+                </div>
+            </div>
+            <hr style={{border: 0, borderTop: isCollected ? '1px dashed #eee' : '1px dashed #ffcc80', margin: 0}}/>
+            <div style={{fontSize: 12, display: 'flex', flexDirection: 'column', gap: 5}}>
+                <div style={{display: 'flex', alignItems: 'center', gap: 6}}>
+                    <span style={{color: '#888'}}>起始:</span>
+                    <MiniImg src={getChildImg(m.starter, m.special)} label={m.starter} size={20} circle/>
+                    <span>{MUSHROOM_CHILDREN[m.starter]}</span>
+                </div>
+                <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4}}>
+                    <EnvBadge label="木头" value={m.wood || '任意'} icon="🪵"/>
+                    <EnvBadge label="日照" value={m.light || '任意'} icon="💡"/>
+                    <EnvBadge label="补水" value={m.humidifier || '任意'} icon="💧"/>
+                    <EnvBadge label="时间" value={m.time || '任意'} icon="🕒"/>
+                </div>
+                {m.special && (
+                    (() => {
+                        const style = getSpecialStyle(m.special);
+                        return (
+                            <div style={{
+                                marginTop: 4, background: style.bg, padding: '6px 8px', borderRadius: 6,
+                                border: `1px solid ${style.border}`, display: 'flex', flexDirection: 'column', gap: 4
+                            }}>
+                                <div style={{
+                                    color: style.color,
+                                    fontWeight: 'bold',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 4
+                                }}>
+                                    <span>{style.icon}</span>{m.special}
+                                </div>
+                                <div style={{display: 'flex', alignItems: 'center', gap: 4}}>
+                                    <span style={{color: '#666'}}>策略:</span>
+                                    {m.save ? (
+                                        <div style={{display: 'flex', alignItems: 'center', gap: 4}}>
+                                            <span style={{color: '#2e7d32', fontWeight: 'bold'}}>✅ 救助</span>
+                                            {TOOL_INFO?.[m.special] && (
+                                                <div style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: 2,
+                                                    background: '#fff',
+                                                    padding: '1px 5px',
+                                                    borderRadius: 4,
+                                                    border: '1px solid rgba(0,0,0,0.1)'
+                                                }}>
+                                                    <MiniImg src={TOOL_INFO[m.special].img} size={14} circle/>
+                                                    <span
+                                                        style={{color: '#333'}}>{TOOL_INFO[m.special].name}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <span style={{color: '#c62828', fontWeight: 'bold'}}>❌ 不救 (变异)</span>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })()
+                )}
+            </div>
+        </div>
+    );
+};
+
 interface EncyclopediaProps {
     collectedIds: string[];
     onToggleCollection: (id: string) => void;
-    // 新增：批量收集回调
     onBatchCollect: (ids: string[]) => void;
     unlockedWoods: WoodType[];
     unlockedLights: LightType[];
@@ -52,32 +167,51 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
     const topRef = useRef<HTMLDivElement>(null);
     const collectedStartRef = useRef<HTMLDivElement>(null);
 
+    // --- 1. 新增：最近操作记录状态 (Session Only) ---
+    const [recentIds, setRecentIds] = useState<string[]>([]);
+
+    const addToRecent = (ids: string | string[]) => {
+        setRecentIds(prev => {
+            const newItems = Array.isArray(ids) ? ids : [ids];
+            // 过滤掉已存在的，然后插到最前面
+            const filteredPrev = prev.filter(pid => !newItems.includes(pid));
+            return [...newItems, ...filteredPrev].slice(0, 10); // 只保留最近10个
+        });
+    };
+
+    // 包装 toggle 函数
+    const handleToggle = (id: string) => {
+        onToggleCollection(id);
+        addToRecent(id);
+    };
+
+    // 包装 batch 函数
+    const handleBatch = (ids: string[]) => {
+        onBatchCollect(ids);
+        addToRecent(ids);
+    };
+
     const [filters, setFilters] = useState({
-        starter: 'all',
-        wood: 'all',
-        light: 'all',
-        humidifier: 'all',
-        time: 'all',
-        special: 'all',
-        save: 'all',
-        collection: 'all',
+        starter: 'all', wood: 'all', light: 'all', humidifier: 'all', time: 'all',
+        special: 'all', save: 'all', collection: 'all',
     });
     const [searchTerm, setSearchTerm] = useState('');
 
-    const checkToolsReady = (m: { wood?: string, light?: string, humidifier?: string }) => {
+    const checkToolsReady = useCallback((m: { wood?: string, light?: string, humidifier?: string }) => {
         const woodReady = !m.wood || unlockedWoods.includes(m.wood as WoodType);
         const lightReady = !m.light || unlockedLights.includes(m.light as LightType);
         const humidifierReady = !m.humidifier || unlockedHumidifiers.includes(m.humidifier as HumidifierType);
         return woodReady && lightReady && humidifierReady;
-    };
+    }, [unlockedWoods, unlockedLights, unlockedHumidifiers]);
 
-    // --- 1. 筛选逻辑 ---
+    // --- 筛选逻辑 ---
     const filteredList = useMemo(() => {
         return MUSHROOM_DB.filter(m => {
             if (searchTerm) {
                 const lower = searchTerm.toLowerCase().trim();
                 if (!m.name.includes(lower) && !m.pinyin.includes(lower)) return false;
             }
+            // ... (Filters copied from previous) ...
             if (filters.starter !== 'all' && m.starter !== filters.starter) return false;
             if (filters.wood !== 'all' && m.wood !== filters.wood) return false;
             if (filters.light !== 'all' && m.light !== filters.light) return false;
@@ -99,37 +233,35 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
             }
             return true;
         });
-    }, [filters, searchTerm, collectedIds, unlockedWoods, unlockedLights, unlockedHumidifiers]);
+    }, [filters, searchTerm, collectedIds, checkToolsReady]);
 
-    // --- 2. 排序逻辑 ---
+    // --- 排序逻辑 ---
     const sortedDisplayList = useMemo(() => {
         return [...filteredList].sort((a, b) => {
             const isACollected = collectedIds.includes(a.id);
             const isBCollected = collectedIds.includes(b.id);
-
-            // 未收集优先
-            if (isACollected !== isBCollected) {
-                return isACollected ? 1 : -1;
-            }
-            // 未收集内部：严格度降序
+            if (isACollected !== isBCollected) return isACollected ? 1 : -1;
             if (!isACollected) {
                 const scoreA = getStrictnessScore(a);
                 const scoreB = getStrictnessScore(b);
                 if (scoreA !== scoreB) return scoreB - scoreA;
             }
-            // 默认顺序
             return MUSHROOM_DB.indexOf(a) - MUSHROOM_DB.indexOf(b);
         });
     }, [filteredList, collectedIds]);
 
-    // --- 3. 计算缺失环境 ---
+    // --- 缺失环境计算 ---
     const missingEnvironments = useMemo(() => {
         const uncollectedItems = filteredList.filter(m => !collectedIds.includes(m.id));
         const envMap = new Map<string, {
-            wood?: string, light?: string, humidifier?: string, time?: string,
-            score: number, count: number, isReady: boolean
+            score: number,
+            count: number,
+            isReady: boolean,
+            wood?: string,
+            light?: string,
+            humidifier?: string,
+            time?: string
         }>();
-
         uncollectedItems.forEach(m => {
             const key = `${m.wood || 'any'}|${m.light || 'any'}|${m.humidifier || 'any'}|${m.time || 'any'}`;
             if (!envMap.has(key)) {
@@ -140,36 +272,32 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
             }
             envMap.get(key)!.count += 1;
         });
-
         return Array.from(envMap.values()).sort((a, b) => {
             if (a.isReady !== b.isReady) return a.isReady ? -1 : 1;
             return b.score - a.score;
         });
-    }, [filteredList, collectedIds, unlockedWoods, unlockedLights, unlockedHumidifiers]);
+    }, [filteredList, collectedIds, checkToolsReady]);
 
-    // 计算当前筛选结果中，有多少个“未收集”的菌种 ID
-    const uncollectedIdsInView = useMemo(() => {
-        return sortedDisplayList
-            .filter(m => !collectedIds.includes(m.id))
-            .map(m => m.id);
-    }, [sortedDisplayList, collectedIds]);
+    const uncollectedIdsInView = useMemo(() => sortedDisplayList.filter(m => !collectedIds.includes(m.id)).map(m => m.id), [sortedDisplayList, collectedIds]);
 
     const handleBatchClick = () => {
         if (uncollectedIdsInView.length === 0) return;
         if (confirm(`确定要将当前筛选列表中的 ${uncollectedIdsInView.length} 个未收集菌种全部标记为“已收集”吗？`)) {
-            onBatchCollect(uncollectedIdsInView);
+            handleBatch(uncollectedIdsInView);
         }
     };
 
-    // Check visibility for FAB
-    const hasCollectedInView = sortedDisplayList.some(m => collectedIds.includes(m.id));
+    // --- 准备最近操作数据 ---
+    const recentMushrooms = useMemo(() => {
+        return recentIds.map(id => MUSHROOM_DB.find(m => m.id === id)).filter((m): m is MushroomDef => !!m);
+    }, [recentIds]);
 
+    const hasCollectedInView = sortedDisplayList.some(m => collectedIds.includes(m.id));
     const selectStyle = {padding: '6px', borderRadius: 4, border: '1px solid #ccc', fontSize: 13, minWidth: 100};
     const totalCollected = collectedIds.length;
     const totalMushrooms = MUSHROOM_DB.length;
     const progressPercent = Math.round((totalCollected / totalMushrooms) * 100);
 
-    // Scroll handlers
     const scrollToTop = () => topRef.current?.scrollIntoView({behavior: 'smooth'});
     const scrollToCollected = () => collectedStartRef.current?.scrollIntoView({behavior: 'smooth', block: 'start'});
 
@@ -183,26 +311,6 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
                 headerColor="#1565c0"
                 action={
                     <div style={{display: 'flex', gap: 8, alignItems: 'center'}}>
-                        <span style={{
-                            fontSize: 12,
-                            background: '#fff',
-                            padding: '2px 8px',
-                            borderRadius: 10,
-                            border: '1px solid #bbdefb',
-                            color: '#666'
-                        }}>
-                            收录: {MUSHROOM_DB.length} / 285
-                        </span>
-                        <span style={{
-                            fontSize: 12,
-                            background: '#fff',
-                            padding: '2px 8px',
-                            borderRadius: 10,
-                            border: '1px solid #bbdefb',
-                            color: '#666'
-                        }}>
-                            显示: {sortedDisplayList.length}
-                        </span>
                         <div style={{
                             display: 'flex',
                             alignItems: 'center',
@@ -217,7 +325,7 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
                                 fontSize: 12,
                                 fontWeight: 'bold',
                                 color: '#2e7d32'
-                            }}>收集进度：{totalCollected}/{totalMushrooms} ({progressPercent}%)</span>
+                            }}>进度：{totalCollected}/{totalMushrooms} ({progressPercent}%)</span>
                         </div>
                     </div>
                 }
@@ -251,7 +359,6 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
                                 <option value="uncollected">❌ 未收集</option>
                             </select>
                         </label>
-                        {/* Other filters... */}
                         <label>
                             <div style={{fontSize: 12, color: '#888', marginBottom: 4}}>初始菌种</div>
                             <select style={selectStyle} value={filters.starter}
@@ -261,46 +368,41 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
                                                                                    value={id}>{MUSHROOM_CHILDREN[id]}</option>)}
                             </select>
                         </label>
+                        {/* 简略其他筛选器，保持界面整洁 */}
                         <label>
                             <div style={{fontSize: 12, color: '#888', marginBottom: 4}}>木头</div>
                             <select style={selectStyle} value={filters.wood}
                                     onChange={e => setFilters({...filters, wood: e.target.value})}>
                                 <option value="all">全部</option>
-                                {Object.values(Woods).map(w => <option key={w} value={w}>{w}</option>)}
-                            </select>
-                        </label>
+                                {Object.values(Woods).map(w => <option key={w} value={w}>{w}</option>)}</select></label>
                         <label>
                             <div style={{fontSize: 12, color: '#888', marginBottom: 4}}>日照</div>
                             <select style={selectStyle} value={filters.light}
                                     onChange={e => setFilters({...filters, light: e.target.value})}>
                                 <option value="all">全部</option>
                                 {Object.values(Lights).map(l => <option key={l} value={l}>{l}</option>)}
-                            </select>
-                        </label>
+                            </select></label>
                         <label>
                             <div style={{fontSize: 12, color: '#888', marginBottom: 4}}>补水</div>
                             <select style={selectStyle} value={filters.humidifier}
                                     onChange={e => setFilters({...filters, humidifier: e.target.value})}>
                                 <option value="all">全部</option>
                                 {Object.values(Humidifiers).map(h => <option key={h} value={h}>{h}</option>)}
-                            </select>
-                        </label>
+                            </select></label>
                         <label>
                             <div style={{fontSize: 12, color: '#888', marginBottom: 4}}>时间</div>
                             <select style={selectStyle} value={filters.time}
                                     onChange={e => setFilters({...filters, time: e.target.value})}>
                                 <option value="all">全部</option>
                                 {Object.values(TimeRanges).map(t => <option key={t} value={t}>{t}</option>)}
-                            </select>
-                        </label>
+                            </select></label>
                         <label>
                             <div style={{fontSize: 12, color: '#888', marginBottom: 4}}>特殊情况</div>
                             <select style={selectStyle} value={filters.special}
                                     onChange={e => setFilters({...filters, special: e.target.value})}>
                                 <option value="all">全部</option>
                                 {Object.values(SpecialConditions).map(s => <option key={s} value={s}>{s}</option>)}
-                            </select>
-                        </label>
+                            </select></label>
                         <label>
                             <div style={{fontSize: 12, color: '#888', marginBottom: 4}}>是否救助</div>
                             <select style={selectStyle} value={filters.save}
@@ -308,11 +410,45 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
                                 <option value="all">全部</option>
                                 <option value="yes">救助</option>
                                 <option value="no">不救</option>
-                            </select>
-                        </label>
+                            </select></label>
                     </div>
                 </div>
             </CollapsibleSection>
+
+            {/* --- 2. 新增：最近操作列表 (Display at Front) --- */}
+            {recentMushrooms.length > 0 && (
+                <CollapsibleSection
+                    title={
+                        <span>🕒 最近操作 <span
+                            style={{
+                                fontSize: 12,
+                                fontWeight: 'normal',
+                                color: '#0277bd'
+                            }}>(操作记录刷新后会丢失，激活情况不会)</span></span>
+                    }
+                    defaultOpen={false}
+                    headerBg="#e1f5fe"
+                    headerColor="#0277bd"
+                >
+                    <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                        gap: 15
+                    }}>
+                        {recentMushrooms.map(m => (
+                            <MushroomCardItem
+                                key={`recent-${m.id}`}
+                                m={m}
+                                isCollected={collectedIds.includes(m.id)}
+                                onToggle={handleToggle}
+                                unlockedWoods={unlockedWoods}
+                                unlockedLights={unlockedLights}
+                                unlockedHumidifiers={unlockedHumidifiers}
+                            />
+                        ))}
+                    </div>
+                </CollapsibleSection>
+            )}
 
             {/* 中间：环境需求汇总 */}
             {missingEnvironments.length > 0 && (
@@ -322,9 +458,7 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
                         fontWeight: 'normal',
                         color: '#e65100'
                     }}>({missingEnvironments.length} 组)</span></span>}
-                    defaultOpen={false}
-                    headerBg="#fff3e0"
-                    headerColor="#e65100"
+                    defaultOpen={false} headerBg="#fff3e0" headerColor="#e65100"
                 >
                     <div style={{display: 'flex', flexDirection: 'column', gap: 8}}>
                         <div style={{fontSize: 12, color: '#888', marginBottom: 4}}>以下是当前筛选范围内，未收集菌种所需的环境组合。<br/>排序优先级：<b>道具齐全</b> &gt;
@@ -375,28 +509,24 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
                 </CollapsibleSection>
             )}
 
-            {/* 新增：批量收集按钮 (位于列表上方) */}
+            {/* 新增：批量收集按钮 */}
             {uncollectedIdsInView.length > 0 && (
                 <div style={{marginTop: 15, marginBottom: 5, display: 'flex', justifyContent: 'flex-end'}}>
-                    <button
-                        onClick={handleBatchClick}
-                        style={{
-                            padding: '8px 16px',
-                            background: '#e8f5e9',
-                            color: '#2e7d32',
-                            border: '1px solid #a5d6a7',
-                            borderRadius: 6,
-                            cursor: 'pointer',
-                            fontWeight: 'bold',
-                            fontSize: 13,
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 6,
-                            boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-                        }}
-                    >
-                        <span>✨</span>
-                        一键收集当前页 {uncollectedIdsInView.length} 个新发现
+                    <button onClick={handleBatchClick} style={{
+                        padding: '8px 16px',
+                        background: '#e8f5e9',
+                        color: '#2e7d32',
+                        border: '1px solid #a5d6a7',
+                        borderRadius: 6,
+                        cursor: 'pointer',
+                        fontWeight: 'bold',
+                        fontSize: 13,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                    }}>
+                        <span>✨</span>一键收集当前页 {uncollectedIdsInView.length} 个新发现
                     </button>
                 </div>
             )}
@@ -410,133 +540,35 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
             }}>
                 {sortedDisplayList.map((m, idx) => {
                     const isCollected = collectedIds.includes(m.id);
-                    // 检测分界点
                     const prevIsCollected = idx > 0 ? collectedIds.includes(sortedDisplayList[idx - 1].id) : false;
                     const showSeparator = isCollected && (idx === 0 || !prevIsCollected);
 
                     return (
                         <React.Fragment key={m.id}>
                             {showSeparator && (
-                                <div
-                                    ref={collectedStartRef}
-                                    style={{
-                                        gridColumn: '1 / -1',
-                                        marginTop: 20, marginBottom: 10,
-                                        display: 'flex', alignItems: 'center', gap: 10,
-                                        color: '#81c784', fontSize: 14, fontWeight: 'bold'
-                                    }}
-                                >
+                                <div ref={collectedStartRef} style={{
+                                    gridColumn: '1 / -1',
+                                    marginTop: 20,
+                                    marginBottom: 10,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 10,
+                                    color: '#81c784',
+                                    fontSize: 14,
+                                    fontWeight: 'bold'
+                                }}>
                                     <span>⬇️ 已收集部分</span>
                                     <div style={{flex: 1, height: 2, background: '#e8f5e9'}}></div>
                                 </div>
                             )}
-                            <div
-                                onClick={() => onToggleCollection(m.id)}
-                                style={{
-                                    border: isCollected ? '2px solid #81c784' : '2px dashed #ffb74d',
-                                    borderRadius: 8, padding: 15,
-                                    background: isCollected ? '#fff' : '#fff8e1',
-                                    boxShadow: isCollected ? '0 2px 8px rgba(76, 175, 80, 0.2)' : '0 2px 5px rgba(0,0,0,0.05)',
-                                    display: 'flex', flexDirection: 'column', gap: 10,
-                                    cursor: 'pointer', position: 'relative', transition: 'all 0.2s',
-                                    opacity: 1
-                                }}
-                            >
-                                <div style={{position: 'absolute', top: 10, right: 10, fontSize: 20, zIndex: 1}}>
-                                    {isCollected ? '✅' :
-                                        <span style={{opacity: 0.3, filter: 'grayscale(100%)'}}>⬜</span>}
-                                </div>
-                                <div style={{display: 'flex', gap: 12}}>
-                                    <MiniImg src={getMushroomImg(m.id)} label={m.name} size={50}/>
-                                    <div>
-                                        <div style={{
-                                            fontWeight: 'bold',
-                                            fontSize: 15,
-                                            color: isCollected ? '#333' : '#e65100'
-                                        }}>{m.name}</div>
-                                        <div style={{fontSize: 12, color: '#999', marginTop: 4}}>ID: {m.id}</div>
-                                        {!isCollected && <div style={{
-                                            fontSize: 11,
-                                            color: '#e65100',
-                                            marginTop: 2,
-                                            fontWeight: 'bold'
-                                        }}>未收集</div>}
-                                    </div>
-                                </div>
-                                <hr style={{
-                                    border: 0,
-                                    borderTop: isCollected ? '1px dashed #eee' : '1px dashed #ffcc80',
-                                    margin: 0
-                                }}/>
-                                <div style={{fontSize: 12, display: 'flex', flexDirection: 'column', gap: 5}}>
-                                    <div style={{display: 'flex', alignItems: 'center', gap: 6}}>
-                                        <span style={{color: '#888'}}>起始:</span>
-                                        <MiniImg src={getChildImg(m.starter, m.special)} label={m.starter} size={20}
-                                                 circle/>
-                                        <span>{MUSHROOM_CHILDREN[m.starter]}</span>
-                                    </div>
-                                    <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4}}>
-                                        <EnvBadge label="木头" value={m.wood || '任意'} icon="🪵"/>
-                                        <EnvBadge label="日照" value={m.light || '任意'} icon="💡"/>
-                                        <EnvBadge label="补水" value={m.humidifier || '任意'} icon="💧"/>
-                                        <EnvBadge label="时间" value={m.time || '任意'} icon="🕒"/>
-                                    </div>
-                                    {m.special && (
-                                        (() => {
-                                            const style = getSpecialStyle(m.special);
-                                            return (
-                                                <div style={{
-                                                    marginTop: 4,
-                                                    background: style.bg,
-                                                    padding: '6px 8px',
-                                                    borderRadius: 6,
-                                                    border: `1px solid ${style.border}`,
-                                                    display: 'flex',
-                                                    flexDirection: 'column',
-                                                    gap: 4
-                                                }}>
-                                                    <div style={{
-                                                        color: style.color,
-                                                        fontWeight: 'bold',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: 4
-                                                    }}>
-                                                        <span>{style.icon}</span>{m.special}
-                                                    </div>
-                                                    <div style={{display: 'flex', alignItems: 'center', gap: 4}}>
-                                                        <span style={{color: '#666'}}>策略:</span>
-                                                        {m.save ? (
-                                                            <div
-                                                                style={{display: 'flex', alignItems: 'center', gap: 4}}>
-                                                                <span style={{color: '#2e7d32', fontWeight: 'bold'}}>✅ 救助</span>
-                                                                {TOOL_INFO[m.special] && (
-                                                                    <div style={{
-                                                                        display: 'flex',
-                                                                        alignItems: 'center',
-                                                                        gap: 2,
-                                                                        background: '#fff',
-                                                                        padding: '1px 5px',
-                                                                        borderRadius: 4,
-                                                                        border: '1px solid rgba(0,0,0,0.1)'
-                                                                    }}>
-                                                                        <MiniImg src={TOOL_INFO[m.special].img}
-                                                                                 size={14} circle/>
-                                                                        <span
-                                                                            style={{color: '#333'}}>{TOOL_INFO[m.special].name}</span>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        ) : (
-                                                            <span style={{color: '#c62828', fontWeight: 'bold'}}>❌ 不救 (变异)</span>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            );
-                                        })()
-                                    )}
-                                </div>
-                            </div>
+                            <MushroomCardItem
+                                m={m}
+                                isCollected={isCollected}
+                                onToggle={handleToggle}
+                                unlockedWoods={unlockedWoods}
+                                unlockedLights={unlockedLights}
+                                unlockedHumidifiers={unlockedHumidifiers}
+                            />
                         </React.Fragment>
                     );
                 })}
@@ -548,39 +580,46 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
                 }}>没有符合条件的菌种</div>}
             </div>
 
-            {/* 悬浮球：快速跳转 */}
+            {/* 悬浮球 */}
             <div style={{
-                position: 'fixed', bottom: 30, right: 20, zIndex: 100,
-                display: 'flex', flexDirection: 'column', gap: 12
+                position: 'fixed',
+                bottom: 30,
+                right: 20,
+                zIndex: 100,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 12
             }}>
-                <button
-                    onClick={scrollToTop}
-                    title="回到未收集/顶部"
-                    style={{
-                        width: 48, height: 48, borderRadius: '50%',
-                        background: '#fff3e0', border: '2px solid #ffcc80',
-                        color: '#e65100', fontSize: 20,
-                        boxShadow: '0 4px 10px rgba(230, 81, 0, 0.2)',
-                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                    }}
-                >
-                    ⬆️
+                <button onClick={scrollToTop} title="回到未收集/顶部" style={{
+                    width: 48,
+                    height: 48,
+                    borderRadius: '50%',
+                    background: '#fff3e0',
+                    border: '2px solid #ffcc80',
+                    color: '#e65100',
+                    fontSize: 20,
+                    boxShadow: '0 4px 10px rgba(230, 81, 0, 0.2)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                }}>⬆️
                 </button>
-
                 {hasCollectedInView && (
-                    <button
-                        onClick={scrollToCollected}
-                        title="跳到已收集部分"
-                        style={{
-                            width: 48, height: 48, borderRadius: '50%',
-                            background: '#e8f5e9', border: '2px solid #81c784',
-                            color: '#2e7d32', fontSize: 20,
-                            boxShadow: '0 4px 10px rgba(76, 175, 80, 0.2)',
-                            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                        }}
-                    >
-                        ⬇️
-                    </button>
+                    <button onClick={scrollToCollected} title="跳到已收集部分" style={{
+                        width: 48,
+                        height: 48,
+                        borderRadius: '50%',
+                        background: '#e8f5e9',
+                        border: '2px solid #81c784',
+                        color: '#2e7d32',
+                        fontSize: 20,
+                        boxShadow: '0 4px 10px rgba(76, 175, 80, 0.2)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                    }}>⬇️</button>
                 )}
             </div>
         </div>

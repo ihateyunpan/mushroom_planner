@@ -6,6 +6,9 @@ import type { MushroomDef } from '../types';
 import { SpecialConditions } from '../types';
 import { getChildImg, getMushroomImg, TOOL_INFO } from '../utils';
 
+// --- 新增：懒加载占位符 ---
+const PLACEHOLDER_SRC = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
 // --- 样式常量 ---
 export const btnStyle = {
     padding: '6px 12px', cursor: 'pointer', border: '1px solid #ccc',
@@ -37,7 +40,7 @@ export const MiniImg: React.FC<{
     color?: string;
     circle?: boolean;
     onClick?: () => void;
-    style?: React.CSSProperties; // 新增：支持 style 属性
+    style?: React.CSSProperties;
 }> = ({
           src,
           label,
@@ -45,24 +48,86 @@ export const MiniImg: React.FC<{
           color = '#f5f5f5',
           circle = false,
           onClick,
-          style // 解构 style
-      }) => (
-    <div title={label} onClick={onClick} style={{
-        width: size, height: size, background: color,
-        borderRadius: circle ? '50%' : 4,
-        cursor: onClick ? 'pointer' : 'default',
-        overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        border: '1px solid #ddd', flexShrink: 0, position: 'relative',
-        ...style // 应用传入的 style
-    }}>
-        <img src={src} alt={label} style={{width: '100%', height: '100%', objectFit: 'contain'}}
-             onError={(e) => {
-                 e.currentTarget.style.display = 'none';
-                 e.currentTarget.parentElement!.innerText = label?.[0] || '?';
-             }}
-        />
-    </div>
-);
+          style
+      }) => {
+    // --- 懒加载逻辑 ---
+    const supportsObserver = typeof IntersectionObserver !== 'undefined';
+
+    const [prevSrc, setPrevSrc] = useState(src);
+    // 初始状态：如果不支持 Observer，则默认直接显示；支持则先显示占位
+    const [showReal, setShowReal] = useState(() => !supportsObserver);
+    const [isLoaded, setIsLoaded] = useState(false);
+    const [hasError, setHasError] = useState(false);
+
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    // 当 src prop 变化时重置状态 (Render Phase Update)
+    if (src !== prevSrc) {
+        setPrevSrc(src);
+        setShowReal(!supportsObserver);
+        setIsLoaded(false);
+        setHasError(false);
+    }
+
+    useEffect(() => {
+        if (showReal || !supportsObserver) return;
+
+        const observer = new IntersectionObserver((entries) => {
+            if (entries[0].isIntersecting) {
+                setShowReal(true);
+                observer.disconnect();
+            }
+        }, {rootMargin: '200px'});
+
+        if (containerRef.current) {
+            observer.observe(containerRef.current);
+        }
+
+        return () => observer.disconnect();
+    }, [showReal, supportsObserver]);
+
+    const displaySrc = showReal ? src : PLACEHOLDER_SRC;
+
+    return (
+        <div
+            ref={containerRef}
+            title={label}
+            onClick={onClick}
+            style={{
+                width: size, height: size, background: color,
+                borderRadius: circle ? '50%' : 4,
+                cursor: onClick ? 'pointer' : 'default',
+                overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                border: '1px solid #ddd', flexShrink: 0, position: 'relative',
+                fontSize: 12, color: '#999', // 错误文字样式
+                ...style
+            }}
+        >
+            {!hasError ? (
+                <img
+                    src={displaySrc}
+                    alt={label}
+                    style={{
+                        width: '100%', height: '100%', objectFit: 'contain',
+                        opacity: isLoaded ? 1 : 0,
+                        transition: 'opacity 0.3s ease-out'
+                    }}
+                    onLoad={() => {
+                        if (displaySrc !== PLACEHOLDER_SRC) {
+                            setIsLoaded(true);
+                        }
+                    }}
+                    onError={() => {
+                        if (showReal) setHasError(true);
+                    }}
+                />
+            ) : (
+                // 图片加载失败时的回退显示 (显示名字首字或?)
+                <span>{label?.[0] || '?'}</span>
+            )}
+        </div>
+    );
+};
 
 export const CollapsibleSection: React.FC<{
     title: React.ReactNode;
@@ -295,9 +360,6 @@ export const MushroomInfoCard: React.FC<{ m: MushroomDef }> = ({m}) => {
 
 export const MushroomSelector: React.FC<{ onSelect: (id: string) => void }> = ({onSelect}) => {
     const [term, setTerm] = useState('');
-    // ... selector implementation ...
-    // Note: In Common.tsx usually we don't have MushroomSelector logic fully expanded if it's large,
-    // but based on previous context, here is the simple version.
 
     const results = React.useMemo(() => {
         if (!term) return [];

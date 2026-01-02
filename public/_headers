@@ -1,0 +1,35 @@
+# 1. 静态资源 (JS, CSS) 强缓存 1 年
+# Vite 生成的文件带 Hash，内容变了文件名就会变，所以可以永久缓存
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# 2. 图片资源强缓存 1 年 (图鉴页加速核心)
+/*.png
+  Cache-Control: public, max-age=31536000, immutable
+/*.jpg
+  Cache-Control: public, max-age=31536000, immutable
+/*.jpeg
+  Cache-Control: public, max-age=31536000, immutable
+/*.gif
+  Cache-Control: public, max-age=31536000, immutable
+/*.svg
+  Cache-Control: public, max-age=31536000, immutable
+/*.webp
+  Cache-Control: public, max-age=31536000, immutable
+/*.ico
+  Cache-Control: public, max-age=31536000, immutable
+
+# 3. 字体文件缓存
+/*.woff2
+  Cache-Control: public, max-age=31536000, immutable
+
+# 4. HTML 文件禁止缓存
+# 确保用户每次访问都能获得最新的 index.html (从而加载最新的 JS Hash)
+/*
+  ! Cache-Control
+  Cache-Control: public, max-age=0, must-revalidate
+
+# 5. 安全配置 (可选)
+/*
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
