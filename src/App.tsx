@@ -23,20 +23,18 @@ const SAFE_INITIAL_DATA: UserSaveData = {
 };
 
 const OLD_STORAGE_KEY = 'MUSHROOM_HELPER_DATA_V1';
-const STORAGE_KEY = 'MUSHROOM_HELPER_GLOBAL_V2'; // 升级存储 Key
+const STORAGE_KEY = 'MUSHROOM_HELPER_GLOBAL_V2';
 const TAB_STORAGE_KEY = 'MUSHROOM_HELPER_ACTIVE_TAB';
 
 function App() {
     // --- Global State ---
     const [globalData, setGlobalData] = useState<GlobalStorage>(() => {
         try {
-            // 1. 尝试读取新版多存档数据
             const savedGlobal = localStorage.getItem(STORAGE_KEY);
             if (savedGlobal) {
                 return JSON.parse(savedGlobal);
             }
 
-            // 2. 尝试读取旧版单存档数据并迁移
             const savedOld = localStorage.getItem(OLD_STORAGE_KEY);
             if (savedOld) {
                 const oldData = JSON.parse(savedOld);
@@ -48,7 +46,6 @@ function App() {
         } catch (e) {
             console.error("Load failed", e);
         }
-        // 3. 默认初始化
         return {
             activeProfileId: 'default',
             profiles: [{id: 'default', name: '默认存档', data: SAFE_INITIAL_DATA}]
@@ -86,15 +83,12 @@ function App() {
     }, [activeTab]);
 
     // --- Data Proxy ---
-    // 获取当前激活的 Profile 数据
     const currentProfile = globalData.profiles.find(p => p.id === globalData.activeProfileId) || globalData.profiles[0];
     const data = currentProfile.data;
 
-    // 封装 setData，使其只更新当前激活的 Profile
     const setData = (action: React.SetStateAction<UserSaveData>) => {
         setGlobalData(prev => {
             const activeId = prev.activeProfileId;
-            // 计算新数据
             const currentData = prev.profiles.find(p => p.id === activeId)?.data || SAFE_INITIAL_DATA;
             const newData = action instanceof Function ? action(currentData) : action;
 
@@ -120,7 +114,7 @@ function App() {
     };
 
     const handleDeleteProfile = (id: string) => {
-        if (globalData.profiles.length <= 1) return; // 至少保留一个
+        if (globalData.profiles.length <= 1) return;
         setGlobalData(prev => {
             const newProfiles = prev.profiles.filter(p => p.id !== id);
             let newActiveId = prev.activeProfileId;
@@ -136,7 +130,6 @@ function App() {
 
     const handleSwitchProfile = (id: string) => {
         setGlobalData(prev => ({...prev, activeProfileId: id}));
-        // 切换存档后重置一些 UI 状态
         setEditingOrderIds(new Set());
     };
 
@@ -147,7 +140,69 @@ function App() {
         }));
     };
 
-    // --- Existing Handlers (using proxy setData) ---
+    // --- Single Import/Export Handlers (New) ---
+    const handleExportCurrent = () => {
+        // 只导出当前 Profile 的 data 部分
+        const blob = new Blob([JSON.stringify(data)], {type: 'application/json'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `mushroom_profile_${currentProfile.name}.json`;
+        a.click();
+    };
+
+    const handleImportSingle = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            try {
+                const json = JSON.parse(ev.target?.result as string);
+
+                // 简单的校验
+                if (!json.orders || !json.inventory) {
+                    throw new Error('文件格式不正确，缺少订单或库存数据');
+                }
+
+                // 询问用户意图
+                // 使用 confirm 简单区分：OK = 新建，Cancel = 覆盖当前
+                // 更好的方式是自定义 Modal，但这里为了保持代码简洁使用原生 confirm 变体
+                // 我们可以检测文件名作为默认新存档名
+                const fileName = file.name.replace('.json', '');
+
+                // 构造提示信息
+                const userChoice = window.confirm(
+                    `成功读取存档文件！\n\n【确定】-> 作为“新存档”导入\n【取消】-> 覆盖“当前存档”(${currentProfile.name})`
+                );
+
+                if (userChoice) {
+                    // Create New Profile
+                    const newId = Date.now().toString();
+                    setGlobalData(prev => ({
+                        activeProfileId: newId,
+                        profiles: [...prev.profiles, {
+                            id: newId,
+                            name: `导入: ${fileName}`,
+                            data: {...SAFE_INITIAL_DATA, ...json}
+                        }]
+                    }));
+                    alert(`✅ 已新建存档: 导入: ${fileName}`);
+                } else {
+                    // Overwrite Current
+                    if (window.confirm(`⚠️ 警告：这将完全覆盖当前存档 "${currentProfile.name}" 的所有数据。\n是否继续？`)) {
+                        setData({...SAFE_INITIAL_DATA, ...json});
+                        alert('✅ 当前存档已更新');
+                    }
+                }
+
+            } catch (err: unknown) {
+                alert(`❌ 导入失败: ${(err as Error).message}`);
+            }
+        };
+        reader.onerror = () => alert('❌ 文件读取错误');
+        reader.readAsText(file);
+    };
+
+    // --- Existing Handlers ---
     const updateInventory = (id: string, count: number) => setData(p => ({
         ...p,
         inventory: {...p.inventory, [id]: Math.max(0, count)}
@@ -173,7 +228,6 @@ function App() {
         }
     };
 
-    // Import/Export Logic Updates
     const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -181,28 +235,11 @@ function App() {
         reader.onload = (ev) => {
             try {
                 const json = JSON.parse(ev.target?.result as string);
-
-                // 检查导入的是否是多存档格式
                 if (json.profiles && Array.isArray(json.profiles)) {
                     setGlobalData(json);
-                    alert(`✅ 成功导入 ${json.profiles.length} 个存档！`);
-                }
-                // 兼容旧版单存档格式导入
-                else if (json.orders && Array.isArray(json.orders)) {
-                    if (confirm("检测到旧版单存档文件。是否将其添加为一个新存档？\n(取消则不导入)")) {
-                        const newId = Date.now().toString();
-                        setGlobalData(prev => ({
-                            activeProfileId: newId,
-                            profiles: [...prev.profiles, {
-                                id: newId,
-                                name: '导入的旧存档',
-                                data: {...SAFE_INITIAL_DATA, ...json}
-                            }]
-                        }));
-                        alert('✅ 旧存档已添加！');
-                    }
+                    alert(`✅ 成功恢复全量备份 (${json.profiles.length} 个存档)`);
                 } else {
-                    throw new Error('格式无效');
+                    throw new Error('格式无效，请使用“恢复备份”功能导入全量备份文件，或使用上方的单存档导入功能。');
                 }
             } catch (err: unknown) {
                 alert(`❌ 导入失败: ${(err as Error).message}`);
@@ -213,11 +250,9 @@ function App() {
     };
 
     const handleExport = () => {
-        // 导出整个 globalData
         const blob = new Blob([JSON.stringify(globalData)], {type: 'application/json'});
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        // 文件名包含当前日期
         const date = new Date().toISOString().split('T')[0];
         a.download = `mushroom_helper_backup_${date}.json`;
         a.click();
@@ -286,6 +321,9 @@ function App() {
                 onAddProfile={handleAddProfile}
                 onDeleteProfile={handleDeleteProfile}
                 onRenameProfile={handleRenameProfile}
+                // Pass new handlers
+                onExportCurrent={handleExportCurrent}
+                onImportSingle={handleImportSingle}
             />
 
             <div style={{

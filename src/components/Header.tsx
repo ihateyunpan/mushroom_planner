@@ -11,6 +11,9 @@ interface HeaderProps {
     onAddProfile: () => void;
     onDeleteProfile: (id: string) => void;
     onRenameProfile: (id: string, newName: string) => void;
+    // 新增：单存档操作
+    onExportCurrent: () => void;
+    onImportSingle: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -21,7 +24,9 @@ export const Header: React.FC<HeaderProps> = ({
                                                   onSwitchProfile,
                                                   onAddProfile,
                                                   onDeleteProfile,
-                                                  onRenameProfile
+                                                  onRenameProfile,
+                                                  onExportCurrent,
+                                                  onImportSingle
                                               }) => (
     <div className="app-header">
         <div className="header-title-group">
@@ -33,7 +38,6 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
         </div>
 
-        {/* 修改：将 flexDirection 改为 row (默认)，增加 wrap 以适应小屏幕 */}
         <div style={{display: 'flex', flexWrap: 'wrap', gap: 15, alignItems: 'center', justifyContent: 'flex-end'}}>
             {/* 存档管理区域 */}
             <div style={{
@@ -77,27 +81,53 @@ export const Header: React.FC<HeaderProps> = ({
 
                 <button
                     onClick={onAddProfile}
-                    title="新建存档"
+                    title="新建空白存档"
                     style={{...btnStyle, padding: '4px 8px', color: '#2e7d32', borderColor: '#a5d6a7'}}
                 >➕
                 </button>
 
+                {/* 新增：单存档操作按钮 */}
+                <div style={{width: 1, height: 20, background: '#ddd', margin: '0 4px'}}></div>
+
+                <label title="导入单个存档文件 (支持新建或覆盖)" style={{
+                    ...btnStyle,
+                    padding: '4px 8px',
+                    cursor: 'pointer',
+                    color: '#1565c0',
+                    borderColor: '#90caf9'
+                }}>
+                    📥
+                    <input type="file" onChange={onImportSingle} accept=".json,application/json"
+                           onClick={(e) => (e.currentTarget.value = '')} style={{display: 'none'}}/>
+                </label>
+
+                <button
+                    onClick={onExportCurrent}
+                    title="导出当前存档"
+                    style={{...btnStyle, padding: '4px 8px', color: '#e65100', borderColor: '#ffcc80'}}
+                >📤
+                </button>
+
                 {profiles.length > 1 && (
-                    <button
-                        onClick={() => {
-                            if (confirm("确定要删除当前存档吗？此操作无法恢复。")) onDeleteProfile(activeProfileId);
-                        }}
-                        title="删除当前存档"
-                        style={{...btnStyle, padding: '4px 8px', color: '#c62828', borderColor: '#ef9a9a'}}
-                    >🗑️</button>
+                    <>
+                        <div style={{width: 1, height: 20, background: '#ddd', margin: '0 4px'}}></div>
+                        <button
+                            onClick={() => {
+                                if (confirm("确定要删除当前存档吗？此操作无法恢复。")) onDeleteProfile(activeProfileId);
+                            }}
+                            title="删除当前存档"
+                            style={{...btnStyle, padding: '4px 8px', color: '#c62828', borderColor: '#ef9a9a'}}
+                        >🗑️
+                        </button>
+                    </>
                 )}
             </div>
 
-            {/* 导入/导出按钮 */}
+            {/* 全局备份按钮 */}
             <div className="header-actions">
-                <button onClick={onExport} style={btnStyle}>📤 备份全存档</button>
+                <button onClick={onExport} style={btnStyle}>📦 备份全存档</button>
                 <label style={btnStyle}>
-                    📥 恢复备份
+                    ♻️ 恢复备份
                     <input type="file" onChange={onImport} accept=".json,application/json"
                            onClick={(e) => (e.currentTarget.value = '')} style={{display: 'none'}}/>
                 </label>
