@@ -2,12 +2,12 @@
 import React, { useMemo, useState } from 'react';
 import type { MushroomDef } from '../types';
 import { getMushroomImg } from '../utils';
-import { CollapsibleSection, MiniImg, MushroomInfoCard, Popover } from './Common';
+import { CollapsibleSection, MiniImg } from './Common';
 
 interface InventoryPanelProps {
     inventory: Record<string, number>;
     relevantMushrooms: MushroomDef[];
-    activeDemandMap: Map<string, number>; // 新增：需求数据
+    activeDemandMap: Map<string, number>;
     onUpdate: (id: string, count: number) => void;
 }
 
@@ -17,7 +17,6 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                                                                   activeDemandMap,
                                                                   onUpdate
                                                               }) => {
-    const [activePopoverId, setActivePopoverId] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
 
     const displayedMushrooms = useMemo(() => {
@@ -58,7 +57,6 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                         {displayedMushrooms.map(m => {
                             const currentCount = inventory[m.id] || 0;
                             const requiredCount = activeDemandMap.get(m.id) || 0;
-                            // 如果有需求且库存不足，标红
                             const isDeficit = requiredCount > 0 && currentCount < requiredCount;
 
                             return (
@@ -70,17 +68,10 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                                     borderBottom: '1px solid #f0f0f0'
                                 }}>
                                     <div style={{display: 'flex', alignItems: 'center', gap: 10, flex: 1}}>
-                                        <Popover
-                                            content={<MushroomInfoCard m={m}/>}
-                                            isOpen={activePopoverId === m.id}
-                                            onOpenChange={(isOpen) => setActivePopoverId(isOpen ? m.id : null)}
-                                        >
-                                            <MiniImg src={getMushroomImg(m.id)} label={m.name} onClick={() => {
-                                            }}/>
-                                        </Popover>
+                                        {/* 修改：移除 Popover，纯展示 */}
+                                        <MiniImg src={getMushroomImg(m.id)} label={m.name} size={32}/>
                                         <div style={{display: 'flex', flexDirection: 'column'}}>
                                             <span style={{fontSize: 14}}>{m.name}</span>
-                                            {/* 显示需求量 */}
                                             {requiredCount > 0 && (
                                                 <span style={{
                                                     fontSize: 11,
@@ -114,11 +105,6 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                                 </div>
                             );
                         })}
-                        {displayedMushrooms.length === 0 && (
-                            <div style={{padding: 10, color: '#999', textAlign: 'center', fontSize: 12}}>
-                                无匹配菌种
-                            </div>
-                        )}
                     </div>
                 </div>
             )}

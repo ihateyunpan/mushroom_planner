@@ -21,7 +21,6 @@ interface OrderPanelProps {
     unlockedWoods: WoodType[];
     unlockedLights: LightType[];
     unlockedHumidifiers: HumidifierType[];
-    // 新增：库存数据，用于判断“可完成”
     inventory: Record<string, number>;
 }
 
@@ -44,8 +43,7 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                                                           inventory
                                                       }) => {
 
-    // 逻辑1：判断道具是否齐全 (可开始)
-    const checkEquipmentReady = (order: Order) => {
+    const isOrderReady = (order: Order) => {
         if (order.items.length === 0) return true;
         return order.items.every(item => {
             const m = MUSHROOM_DB.find(def => def.id === item.mushroomId);
@@ -57,16 +55,16 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
         });
     };
 
-    // 逻辑2：判断库存是否足够 (可完成)
+    const checkEquipmentReady = (order: Order) => isOrderReady(order);
+
     const checkStockReady = (order: Order) => {
-        if (order.items.length === 0) return false; // 空订单不算完成
+        if (order.items.length === 0) return false;
         return order.items.every(item => {
             const current = inventory[item.mushroomId] || 0;
             return current >= item.count;
         });
     };
 
-    // 排序后的订单列表
     const sortedOrders = useMemo(() => {
         const withIndex = orders.map((order, index) => ({order, index}));
 
@@ -74,31 +72,26 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
             const orderA = a.order;
             const orderB = b.order;
 
-            // 1. 正在编辑的置顶
             const isEditingA = editingOrderIds.has(orderA.id);
             const isEditingB = editingOrderIds.has(orderB.id);
             if (isEditingA !== isEditingB) return isEditingA ? -1 : 1;
 
-            // 2. 激活状态优先 (暂停的放后面)
             if (orderA.active !== orderB.active) return orderA.active ? -1 : 1;
 
-            // 3. (仅Active) 状态优先级: 可完成 > 可开始 > 缺道具
             if (orderA.active) {
                 const stockA = checkStockReady(orderA);
                 const stockB = checkStockReady(orderB);
-                if (stockA !== stockB) return stockA ? -1 : 1; // 可完成优先
+                if (stockA !== stockB) return stockA ? -1 : 1;
 
                 const equipA = checkEquipmentReady(orderA);
                 const equipB = checkEquipmentReady(orderB);
-                if (equipA !== equipB) return equipA ? -1 : 1; // 可开始优先
+                if (equipA !== equipB) return equipA ? -1 : 1;
             }
 
-            // 4. 新建的在前
             return a.index - b.index;
         }).map(item => item.order);
     }, [orders, editingOrderIds, unlockedWoods, unlockedLights, unlockedHumidifiers, inventory]);
 
-    // 状态 Badge 组件
     const StatusBadge: React.FC<{ active: boolean; equipReady: boolean; stockReady: boolean }> = ({
                                                                                                       active,
                                                                                                       equipReady,
@@ -149,8 +142,25 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
     };
 
     return (
-        <CollapsibleSection title="📋 订单管理" defaultOpen={true} headerBg="#e3f2fd" headerColor="#1565c0">
-            {/* Input Area */}
+        <CollapsibleSection
+            title={
+                <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
+                    <span>📋 订单管理</span>
+                    {/* 新增：显示订单总数 */}
+                    <span style={{
+                        fontSize: 12, fontWeight: 'normal',
+                        background: 'rgba(255,255,255,0.6)',
+                        padding: '1px 8px', borderRadius: 10,
+                        color: '#1565c0', border: '1px solid rgba(21, 101, 192, 0.2)'
+                    }}>
+                        {orders.length}
+                    </span>
+                </div>
+            }
+            defaultOpen={true}
+            headerBg="#e3f2fd"
+            headerColor="#1565c0"
+        >
             <div style={{display: 'flex', gap: 10, marginBottom: 15}}>
                 <input
                     placeholder="新订单名称 (如: 主线任务3)"
@@ -176,7 +186,6 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                 </button>
             </div>
 
-            {/* List */}
             <div style={{display: 'flex', flexDirection: 'column', gap: 10}}>
                 {sortedOrders.length === 0 &&
                     <div style={{color: '#999', textAlign: 'center', padding: 20}}>暂无订单</div>}
@@ -200,7 +209,6 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                             transition: 'all 0.2s',
                             boxShadow: isEditing ? '0 2px 8px rgba(0,0,0,0.1)' : 'none'
                         }}>
-                            {/* Header Row */}
                             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
                                 <div style={{display: 'flex', alignItems: 'center', gap: 8, flex: 1}}>
                                     <span style={{
@@ -214,7 +222,6 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                                 </div>
 
                                 <div style={{display: 'flex', gap: 6}}>
-                                    {/* Pause/Resume */}
                                     <button
                                         onClick={() => onToggleActive(order.id)}
                                         title={order.active ? "暂停订单" : "恢复订单"}
@@ -227,7 +234,6 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                                         {order.active ? '⏸️' : '▶️'}
                                     </button>
 
-                                    {/* Archive */}
                                     <button
                                         onClick={() => onArchiveOrder(order.id)}
                                         title="完成归档 (扣除库存)"
@@ -237,13 +243,12 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                                             border: stockReady ? '1px solid #a5d6a7' : '1px solid #ddd',
                                             borderRadius: 6,
                                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                            opacity: stockReady ? 1 : 0.5 // 库存不足时半透明
+                                            opacity: stockReady ? 1 : 0.5
                                         }}
                                     >
                                         ✅
                                     </button>
 
-                                    {/* Edit */}
                                     <button
                                         onClick={() => onToggleEdit(order.id, !isEditing)}
                                         title="编辑订单"
@@ -258,7 +263,6 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                                         {isEditing ? '💾' : '✏️'}
                                     </button>
 
-                                    {/* Delete */}
                                     <button
                                         onClick={() => onDeleteOrder(order.id)}
                                         title="删除订单"
@@ -274,7 +278,6 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                                 </div>
                             </div>
 
-                            {/* Edit Items */}
                             {isEditing ? (
                                 <div style={{marginTop: 10, borderTop: '1px dashed #eee', paddingTop: 10}}>
                                     <div style={{display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10}}>
@@ -320,13 +323,11 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                                     <MushroomSelector onSelect={(mid) => onAddItem(order.id, mid)}/>
                                 </div>
                             ) : (
-                                /* Preview Items */
                                 order.items.length > 0 && (
                                     <div style={{marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 8}}>
                                         {order.items.map(i => {
                                             const m = MUSHROOM_DB.find(d => d.id === i.mushroomId);
                                             if (!m) return null;
-                                            // Check item stock
                                             const currentStock = inventory[m.id] || 0;
                                             const isEnough = currentStock >= i.count;
 
@@ -342,7 +343,7 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                                                     <span style={{color: '#555'}}>{m.name}</span>
                                                     <span style={{
                                                         fontWeight: 'bold',
-                                                        color: isEnough ? '#2e7d32' : '#e65100' // Green if enough, Orange if missing
+                                                        color: isEnough ? '#2e7d32' : '#e65100'
                                                     }}>
                                                         {currentStock}/{i.count}
                                                     </span>

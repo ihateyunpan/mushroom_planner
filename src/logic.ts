@@ -112,8 +112,16 @@ export function calculateOptimalRoute(userData: UserSaveData): CalculationResult
                 batch.tasks.push({...currentItem, isPassenger: false});
                 batch.totalCount += currentItem.countNeeded;
             } else {
+                // 修改点：生成稳定的ID
+                const envId = [
+                    currentWood,
+                    currentItem.mushroom.light || '任意',
+                    currentItem.mushroom.humidifier || '任意',
+                    currentItem.mushroom.time || '任意'
+                ].join('-');
+
                 batches.push({
-                    id: `${currentWood}-${Date.now()}-${Math.random()}`,
+                    id: envId, // 使用环境组合作为ID，确保重新计算时ID不变
                     env: {
                         wood: currentWood,
                         light: currentItem.mushroom.light || '任意',
@@ -194,7 +202,7 @@ export function calculateOptimalRoute(userData: UserSaveData): CalculationResult
             return b.strictnessScore - a.strictnessScore;
         }
 
-        // 2. 新增：当严格度相等时，优先显示可完成的（不缺道具）
+        // 2. 当严格度相等时，优先显示可完成的（不缺道具）
         const aIsComplete = a.missingEquipment.length === 0;
         const bIsComplete = b.missingEquipment.length === 0;
         if (aIsComplete !== bIsComplete) {

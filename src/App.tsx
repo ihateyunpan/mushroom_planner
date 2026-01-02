@@ -226,6 +226,14 @@ function App() {
         inventory: {...p.inventory, [id]: Math.max(0, count)}
     }));
 
+    // 新增：库存+1
+    const handleAddOne = (id: string) => {
+        setData(p => ({
+            ...p,
+            inventory: {...p.inventory, [id]: (p.inventory[id] || 0) + 1}
+        }));
+    };
+
     const toggleEquipment = (type: 'wood' | 'light' | 'humidifier', value: string) => {
         setData(prev => {
             const mapKey = type === 'wood' ? 'unlockedWoods' : type === 'light' ? 'unlockedLights' : 'unlockedHumidifiers';
@@ -364,11 +372,10 @@ function App() {
         return Array.from(ids).map(id => MUSHROOM_DB.find(m => m.id === id)).filter((m): m is MushroomDef => !!m).sort((a, b) => a.id.localeCompare(b.id));
     }, [data.orders]);
 
-    // 新增：计算进行中订单对每个菌种的总需求
     const activeDemandMap = useMemo(() => {
         const map = new Map<string, number>();
         data.orders.forEach(o => {
-            if (!o.active) return; // 忽略暂停/已归档的（虽然归档的已经不在orders里了，但逻辑一致）
+            if (!o.active) return;
             o.items.forEach(i => {
                 map.set(i.mushroomId, (map.get(i.mushroomId) || 0) + i.count);
             });
@@ -439,7 +446,7 @@ function App() {
                         <InventoryPanel
                             inventory={data.inventory}
                             relevantMushrooms={relevantMushrooms}
-                            activeDemandMap={activeDemandMap} // 传递需求数据
+                            activeDemandMap={activeDemandMap}
                             onUpdate={updateInventory}
                         />
                         <OrderPanel
@@ -460,6 +467,10 @@ function App() {
                         plan={calculationResult}
                         onCompleteTask={handleCompleteTask}
                         onRefresh={() => setPlanVersion(v => v + 1)}
+                        // 修改：传递新数据
+                        orders={data.orders}
+                        inventory={data.inventory}
+                        onAddOne={handleAddOne}
                     />
                 </div>
             )}
