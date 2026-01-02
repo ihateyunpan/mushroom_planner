@@ -2,7 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import type { MushroomDef } from '../types';
 import { getMushroomImg } from '../utils';
-import { CollapsibleSection, MiniImg } from './Common';
+import { CollapsibleSection, MiniImg, MushroomInfoCard, Popover } from './Common';
 
 interface InventoryPanelProps {
     inventory: Record<string, number>;
@@ -18,6 +18,8 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                                                                   onUpdate
                                                               }) => {
     const [searchTerm, setSearchTerm] = useState('');
+    // 新增：控制详情弹窗的状态
+    const [activePopoverId, setActivePopoverId] = useState<string | null>(null);
 
     const displayedMushrooms = useMemo(() => {
         if (!searchTerm) return relevantMushrooms;
@@ -68,8 +70,21 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                                     borderBottom: '1px solid #f0f0f0'
                                 }}>
                                     <div style={{display: 'flex', alignItems: 'center', gap: 10, flex: 1}}>
-                                        {/* 修改：移除 Popover，纯展示 */}
-                                        <MiniImg src={getMushroomImg(m.id)} label={m.name} size={32}/>
+                                        {/* 修改：包裹 Popover 以显示培育详情 */}
+                                        <Popover
+                                            isOpen={activePopoverId === m.id}
+                                            onOpenChange={(isOpen) => setActivePopoverId(isOpen ? m.id : null)}
+                                            content={<MushroomInfoCard m={m}/>}
+                                        >
+                                            <MiniImg
+                                                src={getMushroomImg(m.id)}
+                                                label={m.name}
+                                                size={32}
+                                                // 增加 cursor pointer 提示可点击
+                                                style={{cursor: 'pointer'}}
+                                            />
+                                        </Popover>
+
                                         <div style={{display: 'flex', flexDirection: 'column'}}>
                                             <span style={{fontSize: 14}}>{m.name}</span>
                                             {requiredCount > 0 && (

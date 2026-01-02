@@ -31,7 +31,6 @@ const getSpecialStyle = (special: string) => {
 };
 
 // --- 子组件：单个菌种卡片 ---
-// 提取出来以便复用
 const MushroomCardItem: React.FC<{
     m: MushroomDef;
     isCollected: boolean;
@@ -294,9 +293,16 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
 
     const hasCollectedInView = sortedDisplayList.some(m => collectedIds.includes(m.id));
     const selectStyle = {padding: '6px', borderRadius: 4, border: '1px solid #ccc', fontSize: 13, minWidth: 100};
+
+    // 全局统计
     const totalCollected = collectedIds.length;
     const totalMushrooms = MUSHROOM_DB.length;
     const progressPercent = Math.round((totalCollected / totalMushrooms) * 100);
+
+    // --- 新增：当前筛选列表的统计 ---
+    const currentListTotal = filteredList.length;
+    const currentListCollected = filteredList.filter(m => collectedIds.includes(m.id)).length;
+    const currentListUncollected = currentListTotal - currentListCollected;
 
     const scrollToTop = () => topRef.current?.scrollIntoView({behavior: 'smooth'});
     const scrollToCollected = () => collectedStartRef.current?.scrollIntoView({behavior: 'smooth', block: 'start'});
@@ -311,13 +317,22 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
                 headerColor="#1565c0"
                 action={
                     <div style={{display: 'flex', gap: 8, alignItems: 'center'}}>
+                        {/* 新增：当前筛选状态统计 */}
                         <div style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 4,
-                            background: '#e8f5e9',
-                            padding: '2px 8px',
-                            borderRadius: 10,
+                            display: 'flex', alignItems: 'center', gap: 6,
+                            background: '#fff', padding: '2px 8px', borderRadius: 10,
+                            border: '1px solid #bbdefb', fontSize: 12
+                        }}>
+                            <span style={{color: '#1565c0'}}>当前: {currentListTotal}</span>
+                            <span style={{color: '#ccc'}}>|</span>
+                            <span style={{color: '#2e7d32'}} title="已收集">✅ {currentListCollected}</span>
+                            <span style={{color: '#e65100'}} title="未收集">❌ {currentListUncollected}</span>
+                        </div>
+
+                        {/* 全局进度 */}
+                        <div style={{
+                            display: 'flex', alignItems: 'center', gap: 4,
+                            background: '#e8f5e9', padding: '2px 8px', borderRadius: 10,
                             border: '1px solid #c8e6c9'
                         }}>
                             <span style={{fontSize: 13}}>🏆</span>
