@@ -1,7 +1,7 @@
 // src/App.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import { MUSHROOM_DB } from './database';
-import { calculateOptimalRoute } from './logic';
+import { calculateOptimalRoute, type PlanBatch } from './logic';
 import type { MushroomDef, UserSaveData } from './types';
 import { Humidifiers, Lights, Woods } from './types';
 import './App.css';
@@ -40,6 +40,9 @@ function App() {
     const [planVersion, setPlanVersion] = useState(0);
     const [editingOrderIds, setEditingOrderIds] = useState<Set<string>>(new Set());
 
+    // 新增：已完成的批次记录 (本次会话有效，刷新后通常不需要保留，或者也可以存localstorage，这里暂存内存)
+    const [completedBatches, setCompletedBatches] = useState<PlanBatch[]>([]);
+
     useEffect(() => {
         try {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -72,6 +75,22 @@ function App() {
         });
     };
 
+    // 新增：处理批次完成
+    const handleCompleteBatch = (batch: PlanBatch) => {
+        // 1. 更新库存 (将批次里所有产出都加入库存)
+        setData(prev => {
+            const newInventory = {...prev.inventory};
+            batch.tasks.forEach(task => {
+                const current = newInventory[task.mushroom.id] || 0;
+                newInventory[task.mushroom.id] = current + task.countNeeded;
+            });
+            return {...prev, inventory: newInventory};
+        });
+
+        // 2. 将该批次移动到已完成列表
+        setCompletedBatches(prev => [...prev, batch]);
+    };
+
     const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -81,6 +100,7 @@ function App() {
                 const json = JSON.parse(ev.target?.result as string);
                 if (!json || !Array.isArray(json.orders)) throw new Error('格式无效');
                 setData(() => ({...SAFE_INITIAL_DATA, ...json}));
+                setCompletedBatches([]); // 导入新存档时清空已完成记录
                 alert('✅ 存档导入成功！');
             } catch (err: unknown) {
                 alert(`❌ 导入失败: ${(err as Error).message}`);
@@ -197,7 +217,12 @@ function App() {
                             onRemoveItem={removeItemFromOrder}
                         />
                     </div>
-                    <PlanPanel plan={calculationResult} onRefresh={() => setPlanVersion(v => v + 1)}/>
+                    <PlanPanel
+                        plan={calculationResult}
+                        completedBatches={completedBatches}
+                        onCompleteBatch={handleCompleteBatch}
+                        onRefresh={() => setPlanVersion(v => v + 1)}
+                    />
                 </div>
             )}
         </div>
