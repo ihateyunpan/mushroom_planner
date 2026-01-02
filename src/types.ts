@@ -102,6 +102,8 @@ export interface UserSaveData {
     unlockedWoods: WoodType[];
     unlockedLights: LightType[];
     unlockedHumidifiers: HumidifierType[];
+    // 新增：已收集的菌种ID列表
+    collectedMushrooms: string[];
 }
 
 export interface Profile {

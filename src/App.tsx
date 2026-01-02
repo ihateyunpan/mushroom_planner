@@ -20,6 +20,7 @@ const SAFE_INITIAL_DATA: UserSaveData = {
     unlockedWoods: Object.values(Woods).slice(0, 1),
     unlockedLights: Object.values(Lights).slice(0, 1),
     unlockedHumidifiers: Object.values(Humidifiers).slice(0, 1),
+    collectedMushrooms: [],
 };
 
 const OLD_STORAGE_KEY = 'MUSHROOM_HELPER_DATA_V1';
@@ -32,7 +33,12 @@ function App() {
         try {
             const savedGlobal = localStorage.getItem(STORAGE_KEY);
             if (savedGlobal) {
-                return JSON.parse(savedGlobal);
+                const parsed = JSON.parse(savedGlobal);
+                parsed.profiles = parsed.profiles.map((p: any) => ({
+                    ...p,
+                    data: {...SAFE_INITIAL_DATA, ...p.data}
+                }));
+                return parsed;
             }
 
             const savedOld = localStorage.getItem(OLD_STORAGE_KEY);
@@ -99,6 +105,18 @@ function App() {
         });
     };
 
+    // --- 新增：图鉴收集状态切换逻辑 ---
+    const toggleCollection = (id: string) => {
+        setData(prev => {
+            const list = prev.collectedMushrooms || [];
+            if (list.includes(id)) {
+                return {...prev, collectedMushrooms: list.filter(x => x !== id)};
+            } else {
+                return {...prev, collectedMushrooms: [...list, id]};
+            }
+        });
+    };
+
     // --- Profile Handlers ---
     const handleAddProfile = () => {
         const newId = Date.now().toString();
@@ -140,9 +158,8 @@ function App() {
         }));
     };
 
-    // --- Single Import/Export Handlers (New) ---
+    // --- Single Import/Export Handlers ---
     const handleExportCurrent = () => {
-        // 只导出当前 Profile 的 data 部分
         const blob = new Blob([JSON.stringify(data)], {type: 'application/json'});
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
@@ -157,25 +174,15 @@ function App() {
         reader.onload = (ev) => {
             try {
                 const json = JSON.parse(ev.target?.result as string);
-
-                // 简单的校验
                 if (!json.orders || !json.inventory) {
                     throw new Error('文件格式不正确，缺少订单或库存数据');
                 }
-
-                // 询问用户意图
-                // 使用 confirm 简单区分：OK = 新建，Cancel = 覆盖当前
-                // 更好的方式是自定义 Modal，但这里为了保持代码简洁使用原生 confirm 变体
-                // 我们可以检测文件名作为默认新存档名
                 const fileName = file.name.replace('.json', '');
-
-                // 构造提示信息
                 const userChoice = window.confirm(
                     `成功读取存档文件！\n\n【确定】-> 作为“新存档”导入\n【取消】-> 覆盖“当前存档”(${currentProfile.name})`
                 );
 
                 if (userChoice) {
-                    // Create New Profile
                     const newId = Date.now().toString();
                     setGlobalData(prev => ({
                         activeProfileId: newId,
@@ -187,13 +194,11 @@ function App() {
                     }));
                     alert(`✅ 已新建存档: 导入: ${fileName}`);
                 } else {
-                    // Overwrite Current
                     if (window.confirm(`⚠️ 警告：这将完全覆盖当前存档 "${currentProfile.name}" 的所有数据。\n是否继续？`)) {
                         setData({...SAFE_INITIAL_DATA, ...json});
                         alert('✅ 当前存档已更新');
                     }
                 }
-
             } catch (err: unknown) {
                 alert(`❌ 导入失败: ${(err as Error).message}`);
             }
@@ -236,6 +241,10 @@ function App() {
             try {
                 const json = JSON.parse(ev.target?.result as string);
                 if (json.profiles && Array.isArray(json.profiles)) {
+                    json.profiles = json.profiles.map((p: any) => ({
+                        ...p,
+                        data: {...SAFE_INITIAL_DATA, ...p.data}
+                    }));
                     setGlobalData(json);
                     alert(`✅ 成功恢复全量备份 (${json.profiles.length} 个存档)`);
                 } else {
@@ -258,7 +267,6 @@ function App() {
         a.click();
     };
 
-    // Order Handlers
     const addOrder = () => {
         if (!newOrderName.trim()) return;
         const newId = Date.now().toString();
@@ -301,7 +309,6 @@ function App() {
         orders: p.orders.map(o => o.id === oid ? {...o, active: !o.active} : o)
     }));
 
-    // --- Computed ---
     const relevantMushrooms = useMemo(() => {
         const ids = new Set<string>();
         data.orders.forEach(o => o.items.forEach(i => ids.add(i.mushroomId)));
@@ -321,7 +328,6 @@ function App() {
                 onAddProfile={handleAddProfile}
                 onDeleteProfile={handleDeleteProfile}
                 onRenameProfile={handleRenameProfile}
-                // Pass new handlers
                 onExportCurrent={handleExportCurrent}
                 onImportSingle={handleImportSingle}
             />
@@ -357,7 +363,14 @@ function App() {
                 </button>
             </div>
 
-            {activeTab === 'encyclopedia' ? <Encyclopedia/> : (
+            {/* 修改：传递解锁道具列表给图鉴 */}
+            {activeTab === 'encyclopedia' ? <Encyclopedia
+                collectedIds={data.collectedMushrooms || []}
+                onToggleCollection={toggleCollection}
+                unlockedWoods={data.unlockedWoods}
+                unlockedLights={data.unlockedLights}
+                unlockedHumidifiers={data.unlockedHumidifiers}
+            /> : (
                 <div className="main-layout">
                     <div style={{display: 'flex', flexDirection: 'column', gap: 10}}>
                         <EquipmentPanel unlockedWoods={data.unlockedWoods} unlockedLights={data.unlockedLights}

@@ -1,5 +1,5 @@
 // src/components/Common.tsx
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { MUSHROOM_CHILDREN, MUSHROOM_DB } from '../database';
 import type { MushroomDef } from '../types';
@@ -36,21 +36,24 @@ export const MiniImg: React.FC<{
     size?: number;
     color?: string;
     circle?: boolean;
-    onClick?: () => void
+    onClick?: () => void;
+    style?: React.CSSProperties; // 新增：支持 style 属性
 }> = ({
           src,
           label,
           size = 32,
           color = '#f5f5f5',
           circle = false,
-          onClick
+          onClick,
+          style // 解构 style
       }) => (
     <div title={label} onClick={onClick} style={{
         width: size, height: size, background: color,
         borderRadius: circle ? '50%' : 4,
         cursor: onClick ? 'pointer' : 'default',
         overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        border: '1px solid #ddd', flexShrink: 0, position: 'relative'
+        border: '1px solid #ddd', flexShrink: 0, position: 'relative',
+        ...style // 应用传入的 style
     }}>
         <img src={src} alt={label} style={{width: '100%', height: '100%', objectFit: 'contain'}}
              onError={(e) => {
@@ -128,13 +131,10 @@ export const ToggleTag: React.FC<{ label: string; active: boolean; onClick: () =
 export const Popover: React.FC<{
     content: React.ReactNode;
     children: React.ReactNode;
-    // 支持受控模式
     isOpen?: boolean;
     onOpenChange?: (open: boolean) => void;
 }> = ({content, children, isOpen, onOpenChange}) => {
-    // 内部状态（用于非受控模式）
     const [internalOpen, setInternalOpen] = useState(false);
-    // 布局状态：包括位置和小三角偏移
     const [layout, setLayout] = useState({top: 0, left: 0, arrowOffset: 0});
     const triggerRef = useRef<HTMLDivElement>(null);
 
@@ -147,19 +147,9 @@ export const Popover: React.FC<{
             const scrollX = window.scrollX;
             const scrollY = window.scrollY;
 
-            // 原始触发器中心点
             const centerX = rect.left + scrollX + rect.width / 2;
-
-            // --- 修复溢出逻辑 ---
-            // Popover 最小宽度约 260px，中心点往左延伸 130px。
-            // 为了防止左侧贴边，设置最小中心点为 140px (130px + 10px 边距)。
             const minCenter = 140;
-
-            // 计算修正后的中心点
             const clampedX = Math.max(minCenter, centerX);
-
-            // 计算小三角的偏移量：使得它始终指向 Trigger 中心
-            // 如果 clampedX > centerX，说明弹窗被强制向右移了，三角需要向左移（负值）以指回原处
             const arrowOffset = centerX - clampedX;
 
             setLayout({
@@ -185,7 +175,6 @@ export const Popover: React.FC<{
         }
     };
 
-    // 当可见性变化时重新计算位置 (解决列表滚动或受控切换时的位置问题)
     useEffect(() => {
         if (visible) updatePosition();
     }, [visible]);
@@ -211,7 +200,7 @@ export const Popover: React.FC<{
                     position: 'absolute',
                     top: layout.top,
                     left: layout.left,
-                    transform: 'translate(-50%, -100%)', // 自身向上平移100%，居中
+                    transform: 'translate(-50%, -100%)',
                     zIndex: 9999,
                     minWidth: 260,
                     background: '#fff',
@@ -222,11 +211,10 @@ export const Popover: React.FC<{
                     pointerEvents: 'auto'
                 }}>
                     {content}
-                    {/* 小三角：位置动态调整 */}
                     <div style={{
                         position: 'absolute',
                         top: '100%',
-                        left: `calc(50% + ${layout.arrowOffset}px)`, // 核心修正：加上偏移量
+                        left: `calc(50% + ${layout.arrowOffset}px)`,
                         marginLeft: -6,
                         borderWidth: 6,
                         borderStyle: 'solid',
@@ -307,7 +295,11 @@ export const MushroomInfoCard: React.FC<{ m: MushroomDef }> = ({m}) => {
 
 export const MushroomSelector: React.FC<{ onSelect: (id: string) => void }> = ({onSelect}) => {
     const [term, setTerm] = useState('');
-    const results = useMemo(() => {
+    // ... selector implementation ...
+    // Note: In Common.tsx usually we don't have MushroomSelector logic fully expanded if it's large,
+    // but based on previous context, here is the simple version.
+
+    const results = React.useMemo(() => {
         if (!term) return [];
         const lower = term.toLowerCase().trim();
         return MUSHROOM_DB.filter(m => m.name.includes(lower) || m.pinyin.includes(lower)).slice(0, 20);
