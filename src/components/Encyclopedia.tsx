@@ -191,6 +191,16 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
                             border: '1px solid #bbdefb',
                             color: '#666'
                         }}>
+                            收录: {MUSHROOM_DB.length} / 285
+                        </span>
+                        <span style={{
+                            fontSize: 12,
+                            background: '#fff',
+                            padding: '2px 8px',
+                            borderRadius: 10,
+                            border: '1px solid #bbdefb',
+                            color: '#666'
+                        }}>
                             显示: {sortedDisplayList.length}
                         </span>
                         <div style={{
@@ -207,7 +217,7 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
                                 fontSize: 12,
                                 fontWeight: 'bold',
                                 color: '#2e7d32'
-                            }}>{totalCollected}/{totalMushrooms} ({progressPercent}%)</span>
+                            }}>收集进度：{totalCollected}/{totalMushrooms} ({progressPercent}%)</span>
                         </div>
                     </div>
                 }
