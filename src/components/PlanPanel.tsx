@@ -29,8 +29,9 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
 
     // 筛选状态
     const [filters, setFilters] = useState({
-        wood: 'all', // 'all' | WoodType
-        status: 'all' // 'all' | 'ready' | 'missing'
+        wood: 'all',   // 'all' | WoodType
+        status: 'all', // 'all' | 'ready' | 'missing'
+        orderIds: [] as string[] // 改为数组，支持多选。空数组代表"全部/无筛选"
     });
 
     // 辅助：检查订单库存是否就绪
@@ -56,13 +57,27 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
             if (filters.status === 'missing' && batch.missingEquipment.length === 0) {
                 return false;
             }
+            // 订单筛选 (多选逻辑)
+            if (filters.orderIds.length > 0) {
+                // 只要批次里的任何一个任务，属于任何一个被选中的订单，就保留该批次
+                const isRelated = batch.tasks.some(task => {
+                    // 检查这个 task 对应的菌种，是否在 选中的订单需求里
+                    return filters.orderIds.some(selectedOid => {
+                        const order = orders.find(o => o.id === selectedOid);
+                        return order && order.items.some(i => i.mushroomId === task.mushroom.id);
+                    });
+                });
+
+                if (!isRelated) return false;
+            }
+
             return true;
         });
-    }, [batches, filters]);
+    }, [batches, filters, orders]);
 
     // --- 2. 基于筛选结果重新计算缺失道具 ---
     const filteredMissingSummary = useMemo(() => {
-        if (filters.wood === 'all' && filters.status === 'all') {
+        if (filters.wood === 'all' && filters.status === 'all' && filters.orderIds.length === 0) {
             return missingSummary;
         }
         const map = new Map<string, MissingItem>();
@@ -114,7 +129,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
         });
         const relatedOrders = Array.from(relatedOrderMap.values());
 
-        // --- 修改：分别统计核心和蹭车道具 ---
+        // --- 分别统计核心和蹭车道具 ---
         const coreTools: Record<string, number> = {};
         const passengerTools: Record<string, number> = {};
 
@@ -753,6 +768,71 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                     paddingBottom: 10,
                     fontSize: 15
                 }}>🔍 筛选培育计划
+                </div>
+
+                {/* 订单筛选 (改版：复选列表) */}
+                <div>
+                    <div style={{fontSize: 13, color: '#666', marginBottom: 6, fontWeight: '500'}}>🧾 关联订单 (多选)
+                    </div>
+                    <div style={{
+                        maxHeight: 150, overflowY: 'auto',
+                        border: '1px solid #eee', borderRadius: 6,
+                        padding: 4, background: '#f9f9f9'
+                    }}>
+                        {orders.filter(o => o.active).length === 0 ? (
+                            <div style={{padding: 8, color: '#999', fontSize: 12}}>暂无进行中订单</div>
+                        ) : (
+                            orders.filter(o => o.active).map(order => (
+                                <label
+                                    key={order.id}
+                                    style={{
+                                        display: 'flex', alignItems: 'center', gap: 8,
+                                        padding: '6px 8px', cursor: 'pointer',
+                                        fontSize: 13, userSelect: 'none',
+                                        borderRadius: 4,
+                                        background: filters.orderIds.includes(order.id) ? '#e3f2fd' : 'transparent'
+                                    }}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={filters.orderIds.includes(order.id)}
+                                        onChange={(e) => {
+                                            const checked = e.target.checked;
+                                            setFilters(prev => ({
+                                                ...prev,
+                                                orderIds: checked
+                                                    ? [...prev.orderIds, order.id]
+                                                    : prev.orderIds.filter(id => id !== order.id)
+                                            }));
+                                        }}
+                                        style={{cursor: 'pointer'}}
+                                    />
+                                    <span style={{
+                                        flex: 1,
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        whiteSpace: 'nowrap'
+                                    }}>
+                                        {order.name}
+                                    </span>
+                                </label>
+                            ))
+                        )}
+                    </div>
+                    {/* 全选/清空辅助按钮 */}
+                    <div style={{display: 'flex', justifyContent: 'flex-end', marginTop: 4, gap: 8}}>
+                        <span
+                            onClick={() => setFilters(prev => ({
+                                ...prev,
+                                orderIds: orders.filter(o => o.active).map(o => o.id)
+                            }))}
+                            style={{fontSize: 11, color: '#1976d2', cursor: 'pointer', textDecoration: 'underline'}}
+                        >全选</span>
+                        <span
+                            onClick={() => setFilters(prev => ({...prev, orderIds: []}))}
+                            style={{fontSize: 11, color: '#999', cursor: 'pointer', textDecoration: 'underline'}}
+                        >清空</span>
+                    </div>
                 </div>
 
                 <div>
