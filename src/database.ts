@@ -2253,7 +2253,7 @@ const LING_MUSHROOMS: MushroomDef[] = [
     {
         id: 'ling3',
         name: '硕大红颜美灵芝',
-        pinyin: 'xdhymlz',
+        pinyin: 'sdhymlz',
         starter: MushroomChildIds.LING,
         wood: Woods.LOVE,
         light: Lights.HUO,
@@ -2679,7 +2679,7 @@ const RUBY_MUSHROOMS: MushroomDef[] = [
     {
         id: 'ruby5',
         name: '常规躺板板宝石菌',
-        pinyin: 'cgglbbsj',
+        pinyin: 'cgtbbbsj',
         starter: MushroomChildIds.RUBY,
         wood: Woods.QIAN_NIU,
         special: SpecialConditions.LESS,

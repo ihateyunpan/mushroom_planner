@@ -1,21 +1,28 @@
-import React from 'react';
+// src/components/OrderPanel.tsx
+import React, { useMemo } from 'react';
 import { MUSHROOM_DB } from '../database';
-import type { Order } from '../types';
 import { getMushroomImg } from '../utils';
-import { btnStyle, CollapsibleSection, MiniImg, MushroomSelector } from './Common';
+import { CollapsibleSection, MiniImg, MushroomSelector } from './Common';
+import type { HumidifierType, LightType, Order, WoodType } from '../types';
 
 interface OrderPanelProps {
     orders: Order[];
     newOrderName: string;
-    onNewOrderNameChange: (name: string) => void;
+    onNewOrderNameChange: (val: string) => void;
     onAddOrder: () => void;
     editingOrderIds: Set<string>;
-    onToggleEdit: (orderId: string, isEditing: boolean) => void;
-    onDeleteOrder: (orderId: string) => void;
-    onToggleActive: (orderId: string) => void;
-    onAddItem: (orderId: string, mushroomId: string) => void;
-    onUpdateItemCount: (orderId: string, mushroomId: string, count: number) => void;
-    onRemoveItem: (orderId: string, mushroomId: string) => void;
+    onToggleEdit: (id: string, isEditing: boolean) => void;
+    onDeleteOrder: (id: string) => void;
+    onToggleActive: (id: string) => void;
+    onArchiveOrder: (id: string) => void;
+    onAddItem: (oid: string, mid: string) => void;
+    onUpdateItemCount: (oid: string, mid: string, count: number) => void;
+    onRemoveItem: (oid: string, mid: string) => void;
+    unlockedWoods: WoodType[];
+    unlockedLights: LightType[];
+    unlockedHumidifiers: HumidifierType[];
+    // 新增：库存数据，用于判断“可完成”
+    inventory: Record<string, number>;
 }
 
 export const OrderPanel: React.FC<OrderPanelProps> = ({
@@ -27,125 +34,325 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                                                           onToggleEdit,
                                                           onDeleteOrder,
                                                           onToggleActive,
+                                                          onArchiveOrder,
                                                           onAddItem,
                                                           onUpdateItemCount,
-                                                          onRemoveItem
+                                                          onRemoveItem,
+                                                          unlockedWoods,
+                                                          unlockedLights,
+                                                          unlockedHumidifiers,
+                                                          inventory
                                                       }) => {
+
+    // 逻辑1：判断道具是否齐全 (可开始)
+    const checkEquipmentReady = (order: Order) => {
+        if (order.items.length === 0) return true;
+        return order.items.every(item => {
+            const m = MUSHROOM_DB.find(def => def.id === item.mushroomId);
+            if (!m) return true;
+            const woodReady = !m.wood || unlockedWoods.includes(m.wood);
+            const lightReady = !m.light || unlockedLights.includes(m.light);
+            const humidifierReady = !m.humidifier || unlockedHumidifiers.includes(m.humidifier);
+            return woodReady && lightReady && humidifierReady;
+        });
+    };
+
+    // 逻辑2：判断库存是否足够 (可完成)
+    const checkStockReady = (order: Order) => {
+        if (order.items.length === 0) return false; // 空订单不算完成
+        return order.items.every(item => {
+            const current = inventory[item.mushroomId] || 0;
+            return current >= item.count;
+        });
+    };
+
+    // 排序后的订单列表
+    const sortedOrders = useMemo(() => {
+        const withIndex = orders.map((order, index) => ({order, index}));
+
+        return withIndex.sort((a, b) => {
+            const orderA = a.order;
+            const orderB = b.order;
+
+            // 1. 正在编辑的置顶
+            const isEditingA = editingOrderIds.has(orderA.id);
+            const isEditingB = editingOrderIds.has(orderB.id);
+            if (isEditingA !== isEditingB) return isEditingA ? -1 : 1;
+
+            // 2. 激活状态优先 (暂停的放后面)
+            if (orderA.active !== orderB.active) return orderA.active ? -1 : 1;
+
+            // 3. (仅Active) 状态优先级: 可完成 > 可开始 > 缺道具
+            if (orderA.active) {
+                const stockA = checkStockReady(orderA);
+                const stockB = checkStockReady(orderB);
+                if (stockA !== stockB) return stockA ? -1 : 1; // 可完成优先
+
+                const equipA = checkEquipmentReady(orderA);
+                const equipB = checkEquipmentReady(orderB);
+                if (equipA !== equipB) return equipA ? -1 : 1; // 可开始优先
+            }
+
+            // 4. 新建的在前
+            return a.index - b.index;
+        }).map(item => item.order);
+    }, [orders, editingOrderIds, unlockedWoods, unlockedLights, unlockedHumidifiers, inventory]);
+
+    // 状态 Badge 组件
+    const StatusBadge: React.FC<{ active: boolean; equipReady: boolean; stockReady: boolean }> = ({
+                                                                                                      active,
+                                                                                                      equipReady,
+                                                                                                      stockReady
+                                                                                                  }) => {
+        if (!active) {
+            return (
+                <span style={{
+                    fontSize: 11, background: '#f5f5f5', color: '#999',
+                    padding: '2px 6px', borderRadius: 4, border: '1px solid #ddd',
+                    display: 'flex', alignItems: 'center', gap: 4
+                }}>
+                    ⏸️ 已暂停
+                </span>
+            );
+        }
+        if (stockReady) {
+            return (
+                <span style={{
+                    fontSize: 11, background: '#e8f5e9', color: '#2e7d32',
+                    padding: '2px 6px', borderRadius: 4, border: '1px solid #a5d6a7',
+                    fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 4
+                }}>
+                    ✅ 可完成
+                </span>
+            );
+        }
+        if (equipReady) {
+            return (
+                <span style={{
+                    fontSize: 11, background: '#e3f2fd', color: '#1565c0',
+                    padding: '2px 6px', borderRadius: 4, border: '1px solid #90caf9',
+                    fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 4
+                }}>
+                    🚀 可开始
+                </span>
+            );
+        }
+        return (
+            <span style={{
+                fontSize: 11, background: '#fff3e0', color: '#ef6c00',
+                padding: '2px 6px', borderRadius: 4, border: '1px solid #ffe0b2',
+                fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 4
+            }}>
+                ⚠️ 缺道具
+            </span>
+        );
+    };
+
     return (
-        <CollapsibleSection title="📜 客户订单" defaultOpen={true} headerBg="#e3f2fd" headerColor="#1565c0">
-            <div style={{display: 'flex', gap: 8, marginBottom: 15}}>
+        <CollapsibleSection title="📋 订单管理" defaultOpen={true} headerBg="#e3f2fd" headerColor="#1565c0">
+            {/* Input Area */}
+            <div style={{display: 'flex', gap: 10, marginBottom: 15}}>
                 <input
-                    value={newOrderName} onChange={e => onNewOrderNameChange(e.target.value)}
-                    placeholder="输入新订单客户名..."
-                    style={{flex: 1, padding: 8, borderRadius: 4, border: '1px solid #ccc'}}
+                    placeholder="新订单名称 (如: 主线任务3)"
+                    value={newOrderName}
+                    onChange={e => onNewOrderNameChange(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && onAddOrder()}
+                    style={{
+                        flex: 1, padding: '8px 12px', borderRadius: 4,
+                        border: '1px solid #ccc', outline: 'none'
+                    }}
                 />
-                <button onClick={onAddOrder}
-                        style={{...btnStyle, background: '#2196f3', color: '#fff', border: 'none'}}>+ 新建
+                <button
+                    onClick={onAddOrder}
+                    disabled={!newOrderName.trim()}
+                    style={{
+                        padding: '8px 20px', borderRadius: 4, border: 'none',
+                        background: newOrderName.trim() ? '#1976d2' : '#e0e0e0',
+                        color: '#fff', cursor: newOrderName.trim() ? 'pointer' : 'not-allowed',
+                        fontWeight: 'bold'
+                    }}
+                >
+                    添加
                 </button>
             </div>
 
+            {/* List */}
             <div style={{display: 'flex', flexDirection: 'column', gap: 10}}>
-                {orders.map(order => {
+                {sortedOrders.length === 0 &&
+                    <div style={{color: '#999', textAlign: 'center', padding: 20}}>暂无订单</div>}
+
+                {sortedOrders.map(order => {
                     const isEditing = editingOrderIds.has(order.id);
+                    const equipReady = checkEquipmentReady(order);
+                    const stockReady = checkStockReady(order);
+
                     return (
-                        <CollapsibleSection
-                            key={order.id}
-                            title={<span style={{
-                                textDecoration: order.active ? 'none' : 'line-through',
-                                color: order.active ? '#333' : '#999'
-                            }}>{order.name} {isEditing ? '(编辑中)' : ''}</span>}
-                            defaultOpen={isEditing || order.items.length === 0}
-                            headerBg={order.active ? (isEditing ? '#fff8e1' : '#fff') : '#f5f5f5'}
-                            action={
-                                <div style={{display: 'flex', gap: 5}}>
-                                    <button style={{
-                                        ...btnStyle,
-                                        background: isEditing ? '#4caf50' : '#fff',
-                                        color: isEditing ? '#fff' : '#333'
-                                    }} onClick={(e) => {
-                                        e.stopPropagation();
-                                        onToggleEdit(order.id, !isEditing);
-                                    }}>{isEditing ? '💾 完成' : '✏️ 编辑'}</button>
-                                    {isEditing &&
-                                        <button style={{fontSize: 10, cursor: 'pointer', color: 'red', opacity: 0.7}}
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    onDeleteOrder(order.id);
-                                                }}>🗑</button>}
-                                    {!isEditing && <button style={{fontSize: 10, cursor: 'pointer', opacity: 0.7}}
-                                                           onClick={(e) => {
-                                                               e.stopPropagation();
-                                                               onToggleActive(order.id);
-                                                           }}>{order.active ? '🚫 停' : '✅ 启'}</button>}
+                        <div key={order.id} style={{
+                            border: order.active
+                                ? (stockReady ? '1px solid #81c784' : (equipReady ? '1px solid #90caf9' : '1px solid #ffcc80'))
+                                : '1px dashed #ccc',
+                            borderRadius: 8,
+                            padding: 12,
+                            background: order.active
+                                ? (stockReady ? '#f1f8e9' : '#fff')
+                                : '#fafafa',
+                            opacity: order.active ? 1 : 0.75,
+                            transition: 'all 0.2s',
+                            boxShadow: isEditing ? '0 2px 8px rgba(0,0,0,0.1)' : 'none'
+                        }}>
+                            {/* Header Row */}
+                            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                                <div style={{display: 'flex', alignItems: 'center', gap: 8, flex: 1}}>
+                                    <span style={{
+                                        fontWeight: 'bold',
+                                        fontSize: 15,
+                                        color: order.active ? '#333' : '#999',
+                                    }}>
+                                        {order.name}
+                                    </span>
+                                    <StatusBadge active={order.active} equipReady={equipReady} stockReady={stockReady}/>
                                 </div>
-                            }
-                        >
-                            <div style={{marginBottom: 10}}>
-                                {order.items.length === 0 && <div style={{
-                                    color: '#ccc',
-                                    fontSize: 12,
-                                    marginBottom: 10
-                                }}>{isEditing ? '请在下方添加菌种...' : '暂无条目 (点击编辑添加)'}</div>}
-                                {order.items.map(item => {
-                                    const m = MUSHROOM_DB.find(x => x.id === item.mushroomId);
-                                    if (!m) return null;
-                                    return (
-                                        <div key={item.mushroomId} style={{
-                                            display: 'flex',
-                                            justifyContent: 'space-between',
-                                            alignItems: 'center',
-                                            margin: '5px 0',
-                                            fontSize: 13
-                                        }}>
-                                            <div style={{display: 'flex', alignItems: 'center', gap: 6}}><MiniImg
-                                                src={getMushroomImg(m.id)} label={m.name}
-                                                size={24}/><span>{m.name}</span></div>
-                                            <div style={{display: 'flex', alignItems: 'center', gap: 4}}>
-                                                {isEditing ? (
-                                                    <>
-                                                        <span style={{fontSize: 12, color: '#888'}}>x</span>
-                                                        <input type="number" min={0}
-                                                               value={item.count === 0 ? '' : item.count}
-                                                               onChange={(e) => {
-                                                                   const val = e.target.value;
-                                                                   if (val === '') onUpdateItemCount(order.id, item.mushroomId, 0);
-                                                                   else {
-                                                                       const num = parseInt(val);
-                                                                       if (!isNaN(num) && num > 0) onUpdateItemCount(order.id, item.mushroomId, num);
-                                                                   }
-                                                               }}
-                                                               onBlur={() => {
-                                                                   if (item.count === 0) onUpdateItemCount(order.id, item.mushroomId, 1);
-                                                               }}
-                                                               style={{
-                                                                   width: 45,
-                                                                   padding: 4,
-                                                                   textAlign: 'center',
-                                                                   borderRadius: 4,
-                                                                   border: '1px solid #ccc',
-                                                                   fontSize: 13
-                                                               }}
-                                                        />
-                                                        <span onClick={() => onRemoveItem(order.id, item.mushroomId)}
-                                                              style={{
-                                                                  cursor: 'pointer',
-                                                                  color: '#ff5252',
-                                                                  fontSize: 16,
-                                                                  marginLeft: 4,
-                                                                  padding: '0 4px'
-                                                              }}>×</span>
-                                                    </>
-                                                ) : <span style={{
-                                                    fontWeight: 'bold',
-                                                    padding: '0 8px'
-                                                }}>x {item.count}</span>}
-                                            </div>
-                                        </div>
-                                    );
-                                })}
+
+                                <div style={{display: 'flex', gap: 6}}>
+                                    {/* Pause/Resume */}
+                                    <button
+                                        onClick={() => onToggleActive(order.id)}
+                                        title={order.active ? "暂停订单" : "恢复订单"}
+                                        style={{
+                                            fontSize: 16, width: 34, height: 34, cursor: 'pointer',
+                                            background: '#fff', border: '1px solid #ddd', borderRadius: 6,
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                        }}
+                                    >
+                                        {order.active ? '⏸️' : '▶️'}
+                                    </button>
+
+                                    {/* Archive */}
+                                    <button
+                                        onClick={() => onArchiveOrder(order.id)}
+                                        title="完成归档 (扣除库存)"
+                                        style={{
+                                            fontSize: 16, width: 34, height: 34, cursor: 'pointer',
+                                            background: stockReady ? '#e8f5e9' : '#f5f5f5',
+                                            border: stockReady ? '1px solid #a5d6a7' : '1px solid #ddd',
+                                            borderRadius: 6,
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            opacity: stockReady ? 1 : 0.5 // 库存不足时半透明
+                                        }}
+                                    >
+                                        ✅
+                                    </button>
+
+                                    {/* Edit */}
+                                    <button
+                                        onClick={() => onToggleEdit(order.id, !isEditing)}
+                                        title="编辑订单"
+                                        style={{
+                                            fontSize: 16, width: 34, height: 34, cursor: 'pointer',
+                                            background: isEditing ? '#e3f2fd' : '#fff',
+                                            border: isEditing ? '1px solid #90caf9' : '1px solid #ddd',
+                                            borderRadius: 6,
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                        }}
+                                    >
+                                        {isEditing ? '💾' : '✏️'}
+                                    </button>
+
+                                    {/* Delete */}
+                                    <button
+                                        onClick={() => onDeleteOrder(order.id)}
+                                        title="删除订单"
+                                        style={{
+                                            fontSize: 16, width: 34, height: 34, cursor: 'pointer',
+                                            background: '#fff', border: '1px solid #ffcdd2', borderRadius: 6,
+                                            color: '#c62828',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                        }}
+                                    >
+                                        🗑️
+                                    </button>
+                                </div>
                             </div>
-                            {isEditing && <MushroomSelector onSelect={mid => onAddItem(order.id, mid)}/>}
-                        </CollapsibleSection>
+
+                            {/* Edit Items */}
+                            {isEditing ? (
+                                <div style={{marginTop: 10, borderTop: '1px dashed #eee', paddingTop: 10}}>
+                                    <div style={{display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10}}>
+                                        {order.items.map(item => {
+                                            const m = MUSHROOM_DB.find(d => d.id === item.mushroomId);
+                                            if (!m) return null;
+                                            return (
+                                                <div key={item.mushroomId} style={{
+                                                    display: 'flex', alignItems: 'center', gap: 5,
+                                                    background: '#fff', border: '1px solid #eee',
+                                                    padding: '2px 6px', borderRadius: 20,
+                                                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                                                }}>
+                                                    <MiniImg src={getMushroomImg(m.id)} size={24} circle/>
+                                                    <span style={{fontSize: 13}}>{m.name}</span>
+                                                    <input
+                                                        type="number" min={1} value={item.count}
+                                                        onChange={e => onUpdateItemCount(order.id, m.id, parseInt(e.target.value) || 0)}
+                                                        style={{
+                                                            width: 35,
+                                                            padding: 2,
+                                                            textAlign: 'center',
+                                                            border: 'none',
+                                                            borderBottom: '1px solid #ccc',
+                                                            outline: 'none'
+                                                        }}
+                                                    />
+                                                    <span
+                                                        onClick={() => onRemoveItem(order.id, m.id)}
+                                                        style={{
+                                                            cursor: 'pointer',
+                                                            color: '#ccc',
+                                                            marginLeft: 2,
+                                                            fontSize: 14,
+                                                            fontWeight: 'bold'
+                                                        }}
+                                                        title="移除此项"
+                                                    >×</span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                    <MushroomSelector onSelect={(mid) => onAddItem(order.id, mid)}/>
+                                </div>
+                            ) : (
+                                /* Preview Items */
+                                order.items.length > 0 && (
+                                    <div style={{marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 8}}>
+                                        {order.items.map(i => {
+                                            const m = MUSHROOM_DB.find(d => d.id === i.mushroomId);
+                                            if (!m) return null;
+                                            // Check item stock
+                                            const currentStock = inventory[m.id] || 0;
+                                            const isEnough = currentStock >= i.count;
+
+                                            return (
+                                                <div key={i.mushroomId} style={{
+                                                    display: 'flex', alignItems: 'center', gap: 6,
+                                                    background: order.active ? 'rgba(255,255,255,0.6)' : '#eee',
+                                                    padding: '2px 8px', borderRadius: 16,
+                                                    border: isEnough ? '1px solid rgba(0,0,0,0.05)' : '1px dashed #ffcc80',
+                                                    fontSize: 12
+                                                }}>
+                                                    <MiniImg src={getMushroomImg(m.id)} size={20} circle/>
+                                                    <span style={{color: '#555'}}>{m.name}</span>
+                                                    <span style={{
+                                                        fontWeight: 'bold',
+                                                        color: isEnough ? '#2e7d32' : '#e65100' // Green if enough, Orange if missing
+                                                    }}>
+                                                        {currentStock}/{i.count}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )
+                            )}
+                        </div>
                     );
                 })}
             </div>

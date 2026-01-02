@@ -64,12 +64,22 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({plan: {batches, missingSumm
             return a.isPassenger ? 1 : -1;
         });
 
+        // 修改点：构建详细的环境标题
+        // 将不是“任意”的环境条件拼接在一起
+        const envParts = [batch.env.wood];
+        if (batch.env.light !== '任意') envParts.push(batch.env.light);
+        if (batch.env.humidifier !== '任意') envParts.push(batch.env.humidifier);
+
+        const batchTitleStr = envParts.join(' + ');
+
         return (
             <CollapsibleSection
-                key={batch.id} defaultOpen={true}
+                key={batch.id}
+                defaultOpen={false} // 保持默认折叠
                 title={
                     <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
-                        <span>第{batchIndexMap.get(batch.id) || idx + 1}批: {batch.env.wood}</span>
+                        <span>第{batchIndexMap.get(batch.id) || idx + 1}批: {batchTitleStr}</span>
+
                         {isFlexibleTime && <span style={{
                             fontSize: 11,
                             background: '#e0f7fa',
@@ -77,6 +87,16 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({plan: {batches, missingSumm
                             padding: '1px 5px',
                             borderRadius: 4
                         }}>🕒 时间任意</span>}
+
+                        {batch.missingEquipment.length > 0 && (
+                            <span style={{
+                                fontSize: 11,
+                                color: 'red',
+                                border: '1px solid red',
+                                padding: '0 4px',
+                                borderRadius: 4
+                            }}>缺道具</span>
+                        )}
                     </div>
                 }
                 headerBg={batch.missingEquipment.length > 0 ? '#fff3e0' : (isFlexibleTime ? '#f0f4c3' : '#f1f8e9')}

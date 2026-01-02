@@ -91,9 +91,7 @@ export function calculateOptimalRoute(userData: UserSaveData): CalculationResult
                 const batch = batches[i];
                 if (batch.env.wood !== currentWood) continue;
 
-                // --- 修改点1：不再进行贪婪合并，只有严格匹配才合并 ---
                 // 只有当批次环境设定与菌种需求一致（都是Specific或都是Any）时才合并
-                // 这样可以确保宽松的菌种会建立自己独立的宽松批次
                 const isStrictMatch = (batchVal: string | '任意', itemVal: string | undefined) => {
                     const b = batchVal === '任意' ? undefined : batchVal;
                     return b === itemVal;
@@ -160,30 +158,23 @@ export function calculateOptimalRoute(userData: UserSaveData): CalculationResult
         }
     });
 
-    // --- 修改点2：交叉注入顺风车 ---
-    // 遍历所有批次对，如果 Target 比 Source 严格且兼容，则把 Source 的任务作为“顺风车”显示在 Target 里
+    // 交叉注入顺风车
     batches.forEach(targetBatch => {
         batches.forEach(sourceBatch => {
             if (targetBatch === sourceBatch) return;
             if (targetBatch.env.wood !== sourceBatch.env.wood) return;
 
-            // 只有当目标批次比源批次更严格（或至少环境包含了源批次的要求）时才注入
-            // 简单判断：目标的环境能满足源批次里所有任务吗？
-            // 因为我们在第1步已经按属性严格分组了，所以只要源批次是“任意”，目标是“具体”，就满足
             const isCompatible = (targetVal: string | '任意', sourceVal: string | '任意') => {
-                if (sourceVal === '任意') return true; // 源是任意，目标是啥都行
-                return targetVal === sourceVal; // 源是具体，目标必须一致
+                if (sourceVal === '任意') return true;
+                return targetVal === sourceVal;
             };
 
             const compatible = isCompatible(targetBatch.env.light, sourceBatch.env.light) &&
                 isCompatible(targetBatch.env.humidifier, sourceBatch.env.humidifier) &&
                 isCompatible(targetBatch.env.time, sourceBatch.env.time);
 
-            // 且必须是不同严格度的，避免相同批次互指（虽然Step1应该避免了相同批次）
-            // 或者是 Target 严格度 > Source 严格度
             if (compatible && targetBatch.strictnessScore > sourceBatch.strictnessScore) {
                 sourceBatch.tasks.forEach(task => {
-                    // 防止重复添加
                     if (!targetBatch.tasks.find(t => t.mushroom.id === task.mushroom.id && t.isPassenger)) {
                         targetBatch.tasks.push({
                             ...task,
@@ -198,9 +189,20 @@ export function calculateOptimalRoute(userData: UserSaveData): CalculationResult
 
     // 5. 排序
     batches.sort((a, b) => {
+        // 1. 严格度优先 (高 -> 低)
         if (b.strictnessScore !== a.strictnessScore) {
-            return b.strictnessScore - a.strictnessScore; // 严格的在前
+            return b.strictnessScore - a.strictnessScore;
         }
+
+        // 2. 新增：当严格度相等时，优先显示可完成的（不缺道具）
+        const aIsComplete = a.missingEquipment.length === 0;
+        const bIsComplete = b.missingEquipment.length === 0;
+        if (aIsComplete !== bIsComplete) {
+            // true (可完成) 排在 false (缺道具) 前面
+            return aIsComplete ? -1 : 1;
+        }
+
+        // 3. 数量优先 (多 -> 少)
         return b.totalCount - a.totalCount;
     });
 
@@ -210,7 +212,6 @@ export function calculateOptimalRoute(userData: UserSaveData): CalculationResult
     };
 }
 
-// ... helper functions (groupBy etc)
 function groupBy<T>(array: T[], keyFn: (item: T) => string): Record<string, T[]> {
     return array.reduce((acc, item) => {
         const key = keyFn(item);

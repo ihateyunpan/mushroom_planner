@@ -105,7 +105,6 @@ function App() {
         });
     };
 
-    // --- 图鉴收集逻辑 ---
     const toggleCollection = (id: string) => {
         setData(prev => {
             const list = prev.collectedMushrooms || [];
@@ -117,7 +116,6 @@ function App() {
         });
     };
 
-    // 新增：批量收集逻辑
     const handleBatchCollect = (ids: string[]) => {
         setData(prev => {
             const currentSet = new Set(prev.collectedMushrooms || []);
@@ -128,9 +126,7 @@ function App() {
                     hasChange = true;
                 }
             });
-
-            if (!hasChange) return prev; // 无变化不更新
-
+            if (!hasChange) return prev;
             return {...prev, collectedMushrooms: Array.from(currentSet)};
         });
     };
@@ -287,7 +283,7 @@ function App() {
     const addOrder = () => {
         if (!newOrderName.trim()) return;
         const newId = Date.now().toString();
-        setData(p => ({...p, orders: [...p.orders, {id: newId, name: newOrderName, items: [], active: true}]}));
+        setData(p => ({...p, orders: [{id: newId, name: newOrderName, items: [], active: true}, ...p.orders]}));
         setNewOrderName('');
         setEditingOrderIds(p => new Set(p).add(newId));
     };
@@ -319,17 +315,65 @@ function App() {
         return n;
     });
     const deleteOrder = (oid: string) => {
-        if (confirm('删除此订单?')) setData(p => ({...p, orders: p.orders.filter(o => o.id !== oid)}));
+        if (confirm('确认删除此订单？(不会扣除库存)')) setData(p => ({
+            ...p,
+            orders: p.orders.filter(o => o.id !== oid)
+        }));
     };
     const toggleOrderActive = (oid: string) => setData(p => ({
         ...p,
         orders: p.orders.map(o => o.id === oid ? {...o, active: !o.active} : o)
     }));
 
+    const handleArchiveOrder = (oid: string) => {
+        const order = data.orders.find(o => o.id === oid);
+        if (!order) return;
+
+        const deductions: string[] = [];
+        let insufficient = false;
+        order.items.forEach(item => {
+            const current = data.inventory[item.mushroomId] || 0;
+            const mushroomName = MUSHROOM_DB.find(m => m.id === item.mushroomId)?.name || item.mushroomId;
+            deductions.push(`${mushroomName}: 扣除 ${item.count} (当前库存: ${current})`);
+            if (current < item.count) insufficient = true;
+        });
+
+        const confirmMsg = `✅ 确认完成订单 "${order.name}" 吗？\n\n----------------------------\n${deductions.join('\n')}\n----------------------------\n` +
+            (insufficient ? `\n⚠️ 警告：部分库存不足，扣除后库存将归零！\n` : `\n`) +
+            `\n订单完成后将从列表中移除。`;
+
+        if (window.confirm(confirmMsg)) {
+            setData(prev => {
+                const newInv = {...prev.inventory};
+                order.items.forEach(item => {
+                    const current = newInv[item.mushroomId] || 0;
+                    newInv[item.mushroomId] = Math.max(0, current - item.count);
+                });
+                return {
+                    ...prev,
+                    inventory: newInv,
+                    orders: prev.orders.filter(o => o.id !== oid)
+                };
+            });
+        }
+    };
+
     const relevantMushrooms = useMemo(() => {
         const ids = new Set<string>();
         data.orders.forEach(o => o.items.forEach(i => ids.add(i.mushroomId)));
         return Array.from(ids).map(id => MUSHROOM_DB.find(m => m.id === id)).filter((m): m is MushroomDef => !!m).sort((a, b) => a.id.localeCompare(b.id));
+    }, [data.orders]);
+
+    // 新增：计算进行中订单对每个菌种的总需求
+    const activeDemandMap = useMemo(() => {
+        const map = new Map<string, number>();
+        data.orders.forEach(o => {
+            if (!o.active) return; // 忽略暂停/已归档的（虽然归档的已经不在orders里了，但逻辑一致）
+            o.items.forEach(i => {
+                map.set(i.mushroomId, (map.get(i.mushroomId) || 0) + i.count);
+            });
+        });
+        return map;
     }, [data.orders]);
 
     const calculationResult = useMemo(() => calculateOptimalRoute(data), [data, planVersion]);
@@ -383,7 +427,6 @@ function App() {
             {activeTab === 'encyclopedia' ? <Encyclopedia
                 collectedIds={data.collectedMushrooms || []}
                 onToggleCollection={toggleCollection}
-                // 修改：传递新的批量处理函数
                 onBatchCollect={handleBatchCollect}
                 unlockedWoods={data.unlockedWoods}
                 unlockedLights={data.unlockedLights}
@@ -393,15 +436,24 @@ function App() {
                     <div style={{display: 'flex', flexDirection: 'column', gap: 10}}>
                         <EquipmentPanel unlockedWoods={data.unlockedWoods} unlockedLights={data.unlockedLights}
                                         unlockedHumidifiers={data.unlockedHumidifiers} onToggle={toggleEquipment}/>
-                        <InventoryPanel inventory={data.inventory} relevantMushrooms={relevantMushrooms}
-                                        onUpdate={updateInventory}/>
+                        <InventoryPanel
+                            inventory={data.inventory}
+                            relevantMushrooms={relevantMushrooms}
+                            activeDemandMap={activeDemandMap} // 传递需求数据
+                            onUpdate={updateInventory}
+                        />
                         <OrderPanel
                             orders={data.orders} newOrderName={newOrderName} onNewOrderNameChange={setNewOrderName}
                             onAddOrder={addOrder}
                             editingOrderIds={editingOrderIds} onToggleEdit={toggleOrderEdit} onDeleteOrder={deleteOrder}
                             onToggleActive={toggleOrderActive}
+                            onArchiveOrder={handleArchiveOrder}
                             onAddItem={addItemToOrder} onUpdateItemCount={updateItemCount}
                             onRemoveItem={removeItemFromOrder}
+                            unlockedWoods={data.unlockedWoods}
+                            unlockedLights={data.unlockedLights}
+                            unlockedHumidifiers={data.unlockedHumidifiers}
+                            inventory={data.inventory}
                         />
                     </div>
                     <PlanPanel
