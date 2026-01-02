@@ -146,7 +146,6 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
             title={
                 <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
                     <span>📋 订单管理</span>
-                    {/* 新增：显示订单总数 */}
                     <span style={{
                         fontSize: 12, fontWeight: 'normal',
                         background: 'rgba(255,255,255,0.6)',
@@ -293,11 +292,22 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                                                 }}>
                                                     <MiniImg src={getMushroomImg(m.id)} size={24} circle/>
                                                     <span style={{fontSize: 13}}>{m.name}</span>
+                                                    {/* --- 调整后的输入框 --- */}
                                                     <input
-                                                        type="number" min={1} value={item.count}
-                                                        onChange={e => onUpdateItemCount(order.id, m.id, parseInt(e.target.value) || 0)}
+                                                        type="number"
+                                                        min={0}
+                                                        // 值为0时显示空字符串，方便清空
+                                                        value={item.count === 0 ? '' : item.count}
+                                                        onChange={e => {
+                                                            const val = e.target.value;
+                                                            // 空字符串处理为 0
+                                                            const num = val === '' ? 0 : parseInt(val);
+                                                            if (!isNaN(num) && num >= 0) {
+                                                                onUpdateItemCount(order.id, m.id, num);
+                                                            }
+                                                        }}
                                                         style={{
-                                                            width: 35,
+                                                            width: 50, // 宽度增加到 50px
                                                             padding: 2,
                                                             textAlign: 'center',
                                                             border: 'none',
