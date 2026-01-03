@@ -1,10 +1,10 @@
 // src/components/PlanPanel.tsx
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { MUSHROOM_CHILDREN, MUSHROOM_DB } from '../database';
 import type { CalculationResult, MissingItem, PlanBatch, PlanTask } from '../logic';
 import type { MushroomChildId, Order, SpecialConditionType } from '../types';
 import { SpecialConditions, TimeRanges, VIRTUAL_ORDER_ID, Woods } from '../types';
-import { getChildImg, getMushroomImg, getSourceInfo, getToolIcon, PROTAGONISTS, TOOL_INFO } from '../utils'; // 引入 PROTAGONISTS
+import { getChildImg, getMushroomImg, getSourceInfo, getToolIcon, PROTAGONISTS, TOOL_INFO } from '../utils';
 import { CollapsibleSection, EnvBadge, MiniImg, MushroomInfoCard, Popover } from './Common';
 import { btnStyle } from "../styles";
 
@@ -27,6 +27,24 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                     }) => {
     const [activePopoverId, setActivePopoverId] = useState<string | null>(null);
     const [isFilterOpen, setIsFilterOpen] = useState(false);
+
+    // 新增：移动端导航相关状态
+    const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+    const [isNavOpen, setIsNavOpen] = useState(false);
+
+    useEffect(() => {
+        const handleResize = () => setIsMobile(window.innerWidth <= 768);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
+    const scrollToId = (id: string) => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.scrollIntoView({behavior: 'smooth', block: 'start'});
+            setIsNavOpen(false); // 跳转后自动关闭菜单
+        }
+    };
 
     const [filters, setFilters] = useState({
         wood: 'all',
@@ -111,7 +129,6 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
         };
     };
 
-    // --- 功能 5: 订单分组逻辑 (二级筛选) ---
     const orderGroups = useMemo(() => {
         const activeOrders = orders.filter(o => o.active);
         const groups: Record<string, Order[]> = {
@@ -143,7 +160,6 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
         });
         const relatedOrders = Array.from(relatedOrderMap.values());
 
-        // 排序：图鉴 -> 可完成 -> 名称
         relatedOrders.sort((a, b) => {
             if (a.id === VIRTUAL_ORDER_ID) return -1;
             if (b.id === VIRTUAL_ORDER_ID) return 1;
@@ -154,7 +170,6 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
         });
         const hasVirtualOrder = relatedOrders.some(o => o.id === VIRTUAL_ORDER_ID);
 
-        // 警告计算
         const timeWarningGroups: Record<string, { hasCore: boolean, hasPassenger: boolean }> = {};
         batch.tasks.forEach(t => {
             const key = `${t.mushroom.starter}-${t.mushroom.special || 'none'}`;
@@ -164,7 +179,6 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
         });
         const showTimeWarning = Object.values(timeWarningGroups).some(g => g.hasCore && g.hasPassenger);
 
-        // 道具统计
         const coreTools: Record<string, number> = {};
         const passengerTools: Record<string, number> = {};
         batch.tasks.forEach(t => {
@@ -262,7 +276,6 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                         isOpen={activePopoverId === popoverKey}
                                         onOpenChange={(open) => setActivePopoverId(open ? popoverKey : null)}
                                         content={
-                                            // 功能 4: 自动补图鉴订单Popup显示新增数量
                                             isVirtual ? (
                                                 <div style={{minWidth: 150, padding: 4}}>
                                                     <div style={{
@@ -272,9 +285,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                     }}>{order.name}</div>
                                                     <div style={{fontSize: 12, color: '#333'}}>
                                                         {(() => {
-                                                            // 计算本批次有多少个是既没库存又没收集的
                                                             const newInBatchCount = batch.tasks.reduce((count, t) => {
-                                                                // 没库存 且 没在已收集列表中
                                                                 if ((inventory[t.mushroom.id] || 0) <= 0 && !collectedIds.includes(t.mushroom.id)) {
                                                                     return count + 1;
                                                                 }
@@ -371,7 +382,6 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                             })}
                         </div>
                     )}
-                    {/* ... (Badge, Tools, Tasks rendering code remains mostly same, omitted for brevity but logic is unchanged) ... */}
                     <div style={{
                         display: 'flex',
                         flexWrap: 'wrap',
@@ -471,7 +481,6 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                             marginBottom: 8
                         }}>⚠️ 核心目标幼菌生长时间更长，请务必注意区分，避免收获错误品种！</div>}
 
-                        {/* 任务列表渲染 (简化展示，逻辑与之前一致) */}
                         {['healthy', 'less', 'much', 'bug'].map(key => {
                             const tasks = diseaseGroups[key];
                             if (tasks.length === 0) return null;
@@ -592,7 +601,6 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
             position: 'relative',
             paddingBottom: 60
         }}>
-            {/* Header Section */}
             <div style={{
                 padding: 20,
                 borderBottom: '1px solid #eee',
@@ -615,7 +623,6 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                 </div>
             </div>
 
-            {/* Main Content & Missing Summary */}
             <div style={{padding: 20}}>
                 {filteredMissingSummary.length > 0 && (
                     <div style={{
@@ -725,7 +732,6 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                     筛选培育计划
                 </div>
 
-                {/* 功能 5: 二级订单筛选器 */}
                 <div>
                     <div style={{fontSize: 13, color: '#666', marginBottom: 6, fontWeight: '500'}}>🧾 关联订单 (多选)
                     </div>
@@ -780,7 +786,6 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                         />
                                         <span style={{fontSize: 12, fontWeight: 'bold', flex: 1}}>{groupName}</span>
                                     </div>
-                                    {/* 二级：具体订单 */}
                                     {groupName !== '图鉴' && (
                                         <div style={{paddingLeft: 10, display: 'flex', flexDirection: 'column'}}>
                                             {groupOrders.map(order => (
@@ -819,7 +824,6 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                         {Object.values(orderGroups).every(arr => arr.length === 0) &&
                             <div style={{padding: 8, color: '#999', fontSize: 12}}>暂无订单</div>}
                     </div>
-                    {/* 全局全选/清空 */}
                     <div style={{display: 'flex', justifyContent: 'flex-end', marginTop: 4, gap: 8}}>
                         <span onClick={() => setFilters(prev => ({
                             ...prev,
@@ -839,7 +843,6 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                     </div>
                 </div>
 
-                {/* 只有在没有选择订单时，显示其他筛选 */}
                 <div>
                     <div style={{fontSize: 13, color: '#666', marginBottom: 6, fontWeight: '500'}}>🪵 木头类型</div>
                     <select value={filters.wood} onChange={e => setFilters({...filters, wood: e.target.value})}
@@ -859,26 +862,155 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                 </div>
             </div>
 
-            {/* Floating Action Button */}
-            <div onClick={() => setIsFilterOpen(!isFilterOpen)} style={{
-                position: 'fixed',
-                bottom: 30,
-                right: 30,
-                width: 56,
-                height: 56,
-                borderRadius: '50%',
-                background: isFilterOpen ? '#f44336' : '#1976d2',
-                color: '#fff',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                boxShadow: '0 6px 16px rgba(0,0,0,0.15)',
-                zIndex: 1002,
-                transition: 'transform 0.3s',
-                transform: isFilterOpen ? 'rotate(90deg)' : 'rotate(0)'
-            }}>
-                {isFilterOpen ? <span style={{fontSize: 24}}>✕</span> : <span style={{fontSize: 24}}>🔍</span>}
+            <>
+                {/* 导航菜单 */}
+                <div style={{
+                    position: 'fixed',
+                    bottom: 170,
+                    right: 38,
+                    display: 'flex', flexDirection: 'column', gap: 10,
+                    zIndex: 1002,
+                    transition: 'all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+                    opacity: isNavOpen ? 1 : 0,
+                    pointerEvents: isNavOpen ? 'auto' : 'none',
+                    transform: isNavOpen ? 'translateY(0) scale(1)' : 'translateY(10px) scale(0.9)',
+                    transformOrigin: 'bottom center'
+                }}>
+                    <button onClick={() => scrollToId('panel-equipment')} style={{
+                        padding: '8px 12px',
+                        background: '#fff',
+                        border: '1px solid #ccc',
+                        borderRadius: 20,
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                        fontSize: 13,
+                        color: '#333',
+                        whiteSpace: 'nowrap',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6
+                    }}>
+                        <span>💡</span> 设备
+                    </button>
+                    <button onClick={() => scrollToId('panel-inventory')} style={{
+                        padding: '8px 12px',
+                        background: '#fff',
+                        border: '1px solid #ccc',
+                        borderRadius: 20,
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                        fontSize: 13,
+                        color: '#333',
+                        whiteSpace: 'nowrap',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6
+                    }}>
+                        <span>🎒</span> 库存
+                    </button>
+                    <button onClick={() => scrollToId('panel-orders')} style={{
+                        padding: '8px 12px',
+                        background: '#fff',
+                        border: '1px solid #ccc',
+                        borderRadius: 20,
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                        fontSize: 13,
+                        color: '#333',
+                        whiteSpace: 'nowrap',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6
+                    }}>
+                        <span>📋</span> 订单
+                    </button>
+                    {/* 新增：跳转到培育计划 */}
+                    <button onClick={() => scrollToId('panel-plan')} style={{
+                        padding: '8px 12px',
+                        background: '#fff',
+                        border: '1px solid #ccc',
+                        borderRadius: 20,
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                        fontSize: 13,
+                        color: '#333',
+                        whiteSpace: 'nowrap',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6
+                    }}>
+                        <span>🌱</span> 计划
+                    </button>
+                </div>
+
+                {/* 导航球按钮 */}
+                <div
+                    onClick={() => setIsNavOpen(!isNavOpen)}
+                    style={{
+                        position: 'fixed',
+                        bottom: 100, // 在筛选球上方 (30 + 56 + 14 = 100)
+                        right: 30,
+                        width: 56, height: 56,
+                        borderRadius: '50%',
+                        background: '#fff',
+                        color: '#1976d2',
+                        border: '1px solid #ddd',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        cursor: 'pointer',
+                        boxShadow: '0 6px 16px rgba(0,0,0,0.1), 0 12px 24px rgba(0,0,0,0.05)',
+                        zIndex: 1002,
+                        transition: 'transform 0.3s',
+                        transform: isNavOpen ? 'rotate(90deg)' : 'rotate(0)'
+                    }}
+                    title="快速跳转"
+                >
+                    {isNavOpen ? (
+                        <span style={{fontSize: 24, fontWeight: 'bold'}}>✕</span>
+                    ) : (
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                             strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="8" y1="6" x2="21" y2="6"></line>
+                            <line x1="8" y1="12" x2="21" y2="12"></line>
+                            <line x1="8" y1="18" x2="21" y2="18"></line>
+                            <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                            <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                            <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                        </svg>
+                    )}
+                </div>
+            </>
+
+            {/* 筛选悬浮按钮 (Icon 修改回漏斗) */}
+            <div
+                onClick={() => setIsFilterOpen(!isFilterOpen)}
+                style={{
+                    position: 'fixed',
+                    bottom: 30, right: 30,
+                    width: 56, height: 56,
+                    borderRadius: '50%',
+                    background: isFilterOpen ? '#f44336' : '#1976d2',
+                    color: '#fff',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    cursor: 'pointer',
+                    boxShadow: '0 6px 16px rgba(0,0,0,0.15), 0 12px 24px rgba(0,0,0,0.1)',
+                    zIndex: 1002,
+                    transition: 'all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+                    transform: isFilterOpen ? 'rotate(90deg)' : 'rotate(0deg)'
+                }}
+                title="筛选培育计划"
+            >
+                {isFilterOpen ? (
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+                         strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                ) : (
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                         strokeLinecap="round" strokeLinejoin="round">
+                        <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                    </svg>
+                )}
             </div>
         </div>
     );

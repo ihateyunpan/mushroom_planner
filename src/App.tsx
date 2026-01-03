@@ -556,51 +556,61 @@ function App() {
             ) : (
                 <div className="main-layout">
                     <div style={{display: 'flex', flexDirection: 'column', gap: 10}}>
-                        <EquipmentPanel unlockedWoods={data.unlockedWoods} unlockedLights={data.unlockedLights}
-                                        unlockedHumidifiers={data.unlockedHumidifiers} onToggle={toggleEquipment}/>
-                        <InventoryPanel
+                        {/* 修改：增加 ID 锚点 */}
+                        <div id="panel-equipment">
+                            <EquipmentPanel unlockedWoods={data.unlockedWoods} unlockedLights={data.unlockedLights}
+                                            unlockedHumidifiers={data.unlockedHumidifiers} onToggle={toggleEquipment}/>
+                        </div>
+                        <div id="panel-inventory">
+                            <InventoryPanel
+                                inventory={data.inventory}
+                                relevantMushrooms={relevantMushrooms}
+                                activeDemandMap={activeDemandMap}
+                                encyclopediaDemandMap={encyclopediaDemandMap}
+                                onUpdate={updateInventory}
+                            />
+                        </div>
+                        <div id="panel-orders">
+                            <OrderPanel
+                                orders={data.orders}
+                                virtualOrder={virtualEncyclopediaOrder}
+                                onToggleVirtualOrder={(active) => setIsEncOrderActive(active)}
+                                newOrderName={newOrderName} onNewOrderNameChange={setNewOrderName}
+                                onAddOrder={addOrder}
+                                editingOrderIds={editingOrderIds} onToggleEdit={toggleOrderEdit}
+                                onDeleteOrder={deleteOrder}
+                                onToggleActive={toggleOrderActive}
+                                onArchiveOrder={handleArchiveOrder}
+                                onAddItem={addItemToOrder} onUpdateItemCount={updateItemCount}
+                                onRemoveItem={removeItemFromOrder}
+                                unlockedWoods={data.unlockedWoods}
+                                unlockedLights={data.unlockedLights}
+                                unlockedHumidifiers={data.unlockedHumidifiers}
+                                inventory={data.inventory}
+                            />
+                        </div>
+                    </div>
+
+                    {/* 修改：为 PlanPanel 增加 ID 包裹 */}
+                    <div id="panel-plan">
+                        <PlanPanel
+                            plan={calculationResult}
+                            onCompleteTask={handleCompleteTask}
+                            onRefresh={() => setPlanVersion(v => v + 1)}
+                            orders={allOrdersWithVirtual}
                             inventory={data.inventory}
-                            relevantMushrooms={relevantMushrooms}
-                            activeDemandMap={activeDemandMap}
-                            encyclopediaDemandMap={encyclopediaDemandMap}
-                            onUpdate={updateInventory}
-                        />
-                        <OrderPanel
-                            orders={data.orders}
-                            virtualOrder={virtualEncyclopediaOrder}
-                            onToggleVirtualOrder={(active) => setIsEncOrderActive(active)}
-                            newOrderName={newOrderName} onNewOrderNameChange={setNewOrderName}
-                            onAddOrder={addOrder}
-                            editingOrderIds={editingOrderIds} onToggleEdit={toggleOrderEdit} onDeleteOrder={deleteOrder}
-                            onToggleActive={toggleOrderActive}
-                            onArchiveOrder={handleArchiveOrder}
-                            onAddItem={addItemToOrder} onUpdateItemCount={updateItemCount}
-                            onRemoveItem={removeItemFromOrder}
-                            unlockedWoods={data.unlockedWoods}
-                            unlockedLights={data.unlockedLights}
-                            unlockedHumidifiers={data.unlockedHumidifiers}
-                            inventory={data.inventory}
+                            onAddOne={(id) => {
+                                const isUncollected = !data.collectedMushrooms.includes(id);
+                                if (isUncollected) {
+                                    if (window.confirm(`🎉 恭喜！这是你图鉴里未收集的菌种。\n是否要顺便标记为“已收集”？`)) {
+                                        toggleCollection(id);
+                                    }
+                                }
+                                handleAddOne(id);
+                            }}
+                            collectedIds={data.collectedMushrooms || []}
                         />
                     </div>
-                    <PlanPanel
-                        plan={calculationResult}
-                        onCompleteTask={handleCompleteTask}
-                        onRefresh={() => setPlanVersion(v => v + 1)}
-                        orders={allOrdersWithVirtual}
-                        inventory={data.inventory}
-                        onAddOne={(id) => {
-                            // 功能点 2: 交互逻辑提示
-                            const isUncollected = !data.collectedMushrooms.includes(id);
-                            if (isUncollected) {
-                                if (window.confirm(`🎉 恭喜！这是你图鉴里未收集的菌种。\n是否要顺便标记为“已收集”？`)) {
-                                    toggleCollection(id);
-                                    // toggleCollection 内部现在已经会处理 addToRecent，所以不需要额外调用
-                                }
-                            }
-                            handleAddOne(id);
-                        }}
-                        collectedIds={data.collectedMushrooms || []}
-                    />
                 </div>
             )}
         </div>
