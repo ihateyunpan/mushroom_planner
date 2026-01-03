@@ -218,7 +218,7 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                         padding: '1px 8px', borderRadius: 10,
                         color: '#1565c0', border: '1px solid rgba(21, 101, 192, 0.2)'
                     }}>
-                        {orders.length + (virtualOrder ? 1 : 0)}
+                        {sortedOrders.length + (virtualOrder ? 1 : 0)} / {orders.length + (virtualOrder ? 1 : 0)}
                     </span>
                 </div>
             }
