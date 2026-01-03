@@ -1,8 +1,8 @@
 // src/components/PlanPanel.tsx
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { MUSHROOM_CHILDREN, MUSHROOM_DB } from '../database';
 import type { CalculationResult, MissingItem, PlanBatch, PlanTask } from '../logic';
-import type { MushroomChildId, Order, SpecialConditionType } from '../types';
+import type { FilterIntent, MushroomChildId, Order, SpecialConditionType } from '../types';
 import { SpecialConditions, TimeRanges, VIRTUAL_ORDER_ID, Woods } from '../types';
 import { getChildImg, getMushroomImg, getSourceInfo, getToolIcon, PROTAGONISTS, TOOL_INFO } from '../utils';
 import { CollapsibleSection, EnvBadge, MiniImg, MushroomInfoCard, Popover } from './Common';
@@ -16,6 +16,8 @@ interface PlanPanelProps {
     inventory: Record<string, number>;
     onAddOne: (id: string) => void;
     collectedIds: string[];
+    // 新增：外部联动属性
+    filterIntent?: FilterIntent | null;
 }
 
 export const PlanPanel: React.FC<PlanPanelProps> = ({
@@ -23,13 +25,14 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                         orders,
                                                         inventory,
                                                         onAddOne,
-                                                        collectedIds
+                                                        collectedIds,
+                                                        filterIntent
                                                     }) => {
     const [activePopoverId, setActivePopoverId] = useState<string | null>(null);
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [isNavOpen, setIsNavOpen] = useState(false);
 
-    // 新增：Tab 状态，默认显示白天
+    // Tab 状态，默认显示白天
     const [activeTimeTab, setActiveTimeTab] = useState<'day' | 'night'>('day');
 
     const scrollToId = (id: string) => {
@@ -45,6 +48,47 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
         status: 'all',
         orderIds: [] as string[]
     });
+
+    // 计算订单分组，用于响应 FilterIntent
+    const orderGroups = useMemo(() => {
+        const activeOrders = orders.filter(o => o.active);
+        const groups: Record<string, Order[]> = {
+            '图鉴': [],
+            ...Object.fromEntries(PROTAGONISTS.map(name => [name, []])),
+            '其他': []
+        };
+
+        activeOrders.forEach(o => {
+            if (o.id === VIRTUAL_ORDER_ID) {
+                groups['图鉴'].push(o);
+                return;
+            }
+            const foundProtagonist = PROTAGONISTS.find(p => o.name.includes(p));
+            if (foundProtagonist) {
+                groups[foundProtagonist].push(o);
+            } else {
+                groups['其他'].push(o);
+            }
+        });
+        return groups;
+    }, [orders]);
+
+    // 核心修改：监听外部筛选意图
+    useEffect(() => {
+        if (!filterIntent) return;
+
+        if (filterIntent.type === 'all') {
+            // 选择“全部”：清空 ID 筛选，即显示所有活跃订单的批次
+            setFilters(prev => ({...prev, orderIds: []}));
+        } else if (filterIntent.type === 'group' && filterIntent.value) {
+            // 选择特定组（包括“其他”和“男主”）
+            const groupName = filterIntent.value;
+            const targetOrders = orderGroups[groupName] || [];
+            // 提取该组所有活跃订单的 ID 并应用
+            const targetIds = targetOrders.map(o => o.id);
+            setFilters(prev => ({...prev, orderIds: targetIds}));
+        }
+    }, [filterIntent, orderGroups]);
 
     const checkOrderStockReady = (order: Order) => {
         if (order.items.length === 0) return false;
@@ -122,29 +166,6 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
             titleColor: '#455a64'
         };
     };
-
-    const orderGroups = useMemo(() => {
-        const activeOrders = orders.filter(o => o.active);
-        const groups: Record<string, Order[]> = {
-            '图鉴': [],
-            ...Object.fromEntries(PROTAGONISTS.map(name => [name, []])),
-            '其他': []
-        };
-
-        activeOrders.forEach(o => {
-            if (o.id === VIRTUAL_ORDER_ID) {
-                groups['图鉴'].push(o);
-                return;
-            }
-            const foundProtagonist = PROTAGONISTS.find(p => o.name.includes(p));
-            if (foundProtagonist) {
-                groups[foundProtagonist].push(o);
-            } else {
-                groups['其他'].push(o);
-            }
-        });
-        return groups;
-    }, [orders]);
 
     const renderBatch = (batch: PlanBatch, _: number, isFlexibleTime: boolean) => {
         const relatedOrderMap = new Map<string, Order>();

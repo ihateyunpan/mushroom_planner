@@ -2,7 +2,7 @@
 import React, { Suspense, useEffect, useMemo, useState } from 'react';
 import { MUSHROOM_DB } from './database';
 import { calculateOptimalRoute, type PlanTask } from './logic';
-import type { GlobalStorage, MushroomDef, Order, UserSaveData } from './types';
+import type { FilterIntent, GlobalStorage, MushroomDef, Order, UserSaveData } from './types';
 import { Humidifiers, Lights, VIRTUAL_ORDER_ID, Woods } from './types';
 import './App.css';
 
@@ -116,6 +116,9 @@ function App() {
             return true;
         }
     });
+
+    // 新增：用于 OrderPanel 和 PlanPanel 联动的状态 (升级为 FilterIntent)
+    const [filterIntent, setFilterIntent] = useState<FilterIntent | null>(null);
 
     // 修改：addToRecent 直接更新 globalData，实现持久化
     const addToRecent = (ids: string | string[]) => {
@@ -598,6 +601,7 @@ function App() {
                             />
                         </div>
                         <div id="panel-orders">
+                            {/* 修改：传入联动回调 */}
                             <OrderPanel
                                 orders={data.orders}
                                 virtualOrder={virtualEncyclopediaOrder}
@@ -614,11 +618,12 @@ function App() {
                                 unlockedLights={data.unlockedLights}
                                 unlockedHumidifiers={data.unlockedHumidifiers}
                                 inventory={data.inventory}
+                                onFilterIntentChange={setFilterIntent}
                             />
                         </div>
                     </div>
 
-                    {/* 修改：为 PlanPanel 增加 ID 包裹 */}
+                    {/* 修改：传入联动状态 */}
                     <div id="panel-plan">
                         <PlanPanel
                             plan={calculationResult}
@@ -636,6 +641,7 @@ function App() {
                                 handleAddOne(id);
                             }}
                             collectedIds={data.collectedMushrooms || []}
+                            filterIntent={filterIntent}
                         />
                     </div>
                 </div>

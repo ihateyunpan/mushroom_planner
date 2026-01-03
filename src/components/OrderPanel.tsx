@@ -3,7 +3,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { MUSHROOM_DB } from '../database';
 import { getMushroomImg, PROTAGONISTS } from '../utils';
 import { CollapsibleSection, MiniImg, MushroomSelector } from './Common';
-import type { HumidifierType, LightType, Order, WoodType } from '../types';
+import type { FilterIntent, HumidifierType, LightType, Order, WoodType } from '../types';
 
 interface OrderPanelProps {
     orders: Order[];
@@ -24,6 +24,8 @@ interface OrderPanelProps {
     unlockedLights: LightType[];
     unlockedHumidifiers: HumidifierType[];
     inventory: Record<string, number>;
+    // 新增：筛选联动回调
+    onFilterIntentChange?: (intent: FilterIntent) => void;
 }
 
 // 静态组件：状态徽章
@@ -93,7 +95,8 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                                                           unlockedWoods,
                                                           unlockedLights,
                                                           unlockedHumidifiers,
-                                                          inventory
+                                                          inventory,
+                                                          onFilterIntentChange
                                                       }) => {
     // 筛选状态: null(全部) | 'READY'(可完成) | 'OTHER'(其他) | 男主名字
     const [activeProtagonistFilter, setActiveProtagonistFilter] = useState<string | null>(null);
@@ -185,6 +188,25 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
         justifyContent: 'center'
     };
 
+    // 修改：处理筛选变化并发送联动意图
+    const handleFilterChange = (newVal: string | null) => {
+        setActiveProtagonistFilter(newVal);
+        if (onFilterIntentChange) {
+            // 根据 newVal 决定发送什么意图给 PlanPanel
+            if (newVal === null) {
+                // 点击“全部”或者取消当前筛选 -> 显示全部
+                onFilterIntentChange({type: 'all'});
+            } else if (newVal === 'OTHER') {
+                // 点击“其他” -> 筛选“其他”组
+                onFilterIntentChange({type: 'group', value: '其他'});
+            } else if (PROTAGONISTS.includes(newVal)) {
+                // 点击“男主名” -> 筛选该男主组
+                onFilterIntentChange({type: 'group', value: newVal});
+            }
+            // 注意：如果 newVal === 'READY' (可完成)，不发送意图，保持 PlanPanel 原样
+        }
+    };
+
     return (
         <CollapsibleSection
             title={
@@ -210,7 +232,7 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                 {/* 第一行：功能性筛选 (全部、可完成、其他) */}
                 <div style={{display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center'}}>
                     <button
-                        onClick={() => setActiveProtagonistFilter(null)}
+                        onClick={() => handleFilterChange(null)}
                         style={{
                             ...filterBtnStyle,
                             background: activeProtagonistFilter === null ? '#1565c0' : '#fff',
@@ -225,7 +247,7 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                     </button>
 
                     <button
-                        onClick={() => setActiveProtagonistFilter(activeProtagonistFilter === 'READY' ? null : 'READY')}
+                        onClick={() => handleFilterChange(activeProtagonistFilter === 'READY' ? null : 'READY')}
                         style={{
                             ...filterBtnStyle,
                             background: activeProtagonistFilter === 'READY' ? '#e8f5e9' : '#fff',
@@ -241,7 +263,7 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                     </button>
 
                     <button
-                        onClick={() => setActiveProtagonistFilter(activeProtagonistFilter === 'OTHER' ? null : 'OTHER')}
+                        onClick={() => handleFilterChange(activeProtagonistFilter === 'OTHER' ? null : 'OTHER')}
                         style={{
                             ...filterBtnStyle,
                             background: activeProtagonistFilter === 'OTHER' ? '#e3f2fd' : '#fff',
@@ -261,7 +283,7 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                     {PROTAGONISTS.map(name => (
                         <button
                             key={name}
-                            onClick={() => setActiveProtagonistFilter(name === activeProtagonistFilter ? null : name)}
+                            onClick={() => handleFilterChange(name === activeProtagonistFilter ? null : name)}
                             style={{
                                 ...filterBtnStyle,
                                 padding: '5px 12px', // 男主名字较短，稍微紧凑一点

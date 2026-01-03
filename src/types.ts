@@ -120,3 +120,9 @@ export interface GlobalStorage {
     // 新增：图鉴最近操作记录 (V3 版本加入)
     recentIds: string[];
 }
+
+// 新增：组件间筛选联动意图
+export interface FilterIntent {
+    type: 'all' | 'group';
+    value?: string; // 当 type 为 group 时，value 为组名
+}
