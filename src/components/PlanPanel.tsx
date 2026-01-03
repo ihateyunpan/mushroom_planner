@@ -237,15 +237,16 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
             else if (sp === SpecialConditions.BUG) diseaseGroups['bug'].push(task);
         });
 
-        // 修改：在聚合时保留 targetMushroomId，以便后续操作
         const aggregateTasks = (tasks: PlanTask[]) => {
             const map = new Map<string, {
                 starter: string,
                 count: number,
                 isPassenger: boolean,
                 special?: string,
-                targetId: string
+                targetId: string,
+                hasUncollected: boolean // 新增字段
             }>();
+
             tasks.forEach(t => {
                 const key = `${t.mushroom.starter}_${!!t.isPassenger}_${t.mushroom.special || 'none'}`;
                 if (!map.has(key)) map.set(key, {
@@ -253,9 +254,17 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                     count: 0,
                     isPassenger: !!t.isPassenger,
                     special: t.mushroom.special,
-                    targetId: t.mushroom.id // 记录对应的最终菌种ID
+                    targetId: t.mushroom.id,
+                    hasUncollected: false // 初始化
                 });
-                map.get(key)!.count += t.countNeeded;
+
+                const entry = map.get(key)!;
+                entry.count += t.countNeeded;
+
+                // 如果当前任务对应的菌种未收集，标记该组为“含新”
+                if (!collectedIds.includes(t.mushroom.id)) {
+                    entry.hasUncollected = true;
+                }
             });
             return Array.from(map.values()).sort((a, b) => (a.isPassenger !== b.isPassenger ? (a.isPassenger ? 1 : -1) : 0));
         };
@@ -566,9 +575,27 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                 borderRadius: 4,
                                                 opacity: isAllCovered ? 0.5 : (t.isPassenger ? 0.7 : 1)
                                             }}>
-                                                <MiniImg
-                                                    src={getChildImg(t.starter, t.special as (SpecialConditionType | undefined))}
-                                                    size={24} circle/>
+                                                {/* 修改：给 MiniImg 加个容器以定位红点 */}
+                                                <div style={{position: 'relative'}}>
+                                                    <MiniImg
+                                                        src={getChildImg(t.starter, t.special as (SpecialConditionType | undefined))}
+                                                        size={24}
+                                                        circle/>
+                                                    {t.hasUncollected && (
+                                                        <div style={{
+                                                            position: 'absolute',
+                                                            top: -2,
+                                                            right: -2,
+                                                            width: 8,
+                                                            height: 8,
+                                                            borderRadius: '50%',
+                                                            background: '#ff3d00',
+                                                            border: '1px solid #fff',
+                                                            zIndex: 1
+                                                        }} title="该需求包含未收集的新菌种"/>
+                                                    )}
+                                                </div>
+
                                                 <span>{MUSHROOM_CHILDREN[t.starter as MushroomChildId]}</span>
                                                 <span style={{fontWeight: 'bold', color, marginLeft: 2}}>
                                                     x{remainingNeeded}
