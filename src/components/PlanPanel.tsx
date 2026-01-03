@@ -1,10 +1,18 @@
 // src/components/PlanPanel.tsx
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { MUSHROOM_CHILDREN, MUSHROOM_DB } from '../database';
 import type { CalculationResult, MissingItem, PlanBatch, PlanTask } from '../logic';
 import type { FilterIntent, MushroomChildId, Order, SpecialConditionType } from '../types';
 import { SpecialConditions, TimeRanges, VIRTUAL_ORDER_ID, Woods } from '../types';
-import { getChildImg, getMushroomImg, getSourceInfo, getToolIcon, PROTAGONISTS, TOOL_INFO } from '../utils';
+import {
+    getChildImg,
+    getMushroomImg,
+    getSourceInfo,
+    getSpecialStyle,
+    getToolIcon,
+    PROTAGONISTS,
+    TOOL_INFO
+} from '../utils';
 import { CollapsibleSection, EnvBadge, MiniImg, MushroomInfoCard, Popover } from './Common';
 import { btnStyle } from "../styles";
 
@@ -31,6 +39,8 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
     const [activePopoverId, setActivePopoverId] = useState<string | null>(null);
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [isNavOpen, setIsNavOpen] = useState(false);
+    // 新增：记录已救助但未长成的菌子数量 (Key: mushroomId, Value: count)
+    const [growingCounts, setGrowingCounts] = useState<Record<string, number>>({});
 
     // Tab 状态，默认显示白天
     const [activeTimeTab, setActiveTimeTab] = useState<'day' | 'night'>('day');
@@ -73,22 +83,27 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
         return groups;
     }, [orders]);
 
+    // 修复：使用 Ref 追踪 orderGroups，避免 useEffect 依赖导致循环渲染或被 Linter 警告
+    const orderGroupsRef = useRef(orderGroups);
+    useEffect(() => {
+        orderGroupsRef.current = orderGroups;
+    }, [orderGroups]);
+
     // 核心修改：监听外部筛选意图
     useEffect(() => {
         if (!filterIntent) return;
 
         if (filterIntent.type === 'all') {
-            // 选择“全部”：清空 ID 筛选，即显示所有活跃订单的批次
             setFilters(prev => ({...prev, orderIds: []}));
         } else if (filterIntent.type === 'group' && filterIntent.value) {
-            // 选择特定组（包括“其他”和“男主”）
             const groupName = filterIntent.value;
-            const targetOrders = orderGroups[groupName] || [];
-            // 提取该组所有活跃订单的 ID 并应用
+            const targetOrders = orderGroupsRef.current[groupName] || [];
             const targetIds = targetOrders.map(o => o.id);
             setFilters(prev => ({...prev, orderIds: targetIds}));
         }
-    }, [filterIntent, orderGroups]);
+        // 修改依赖项：拆解对象，只监听属性值。
+        // 这样即使 filterIntent 对象引用变化，只要 type 和 value 没变，就不会触发更新
+    }, [filterIntent?.type, filterIntent?.value]);
 
     const checkOrderStockReady = (order: Order) => {
         if (order.items.length === 0) return false;
@@ -212,15 +227,23 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
             else if (sp === SpecialConditions.BUG) diseaseGroups['bug'].push(task);
         });
 
+        // 修改：在聚合时保留 targetMushroomId，以便后续操作
         const aggregateTasks = (tasks: PlanTask[]) => {
-            const map = new Map<string, { starter: string, count: number, isPassenger: boolean, special?: string }>();
+            const map = new Map<string, {
+                starter: string,
+                count: number,
+                isPassenger: boolean,
+                special?: string,
+                targetId: string
+            }>();
             tasks.forEach(t => {
-                const key = `${t.mushroom.starter}_${!!t.isPassenger}`;
+                const key = `${t.mushroom.starter}_${!!t.isPassenger}_${t.mushroom.special || 'none'}`;
                 if (!map.has(key)) map.set(key, {
                     starter: t.mushroom.starter,
                     count: 0,
                     isPassenger: !!t.isPassenger,
-                    special: t.mushroom.special
+                    special: t.mushroom.special,
+                    targetId: t.mushroom.id // 记录对应的最终菌种ID
                 });
                 map.get(key)!.count += t.countNeeded;
             });
@@ -431,22 +454,27 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                             {Object.keys(coreTools).length > 0 && (
                                 <div style={{display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap'}}>
                                     <span style={{fontSize: 13, fontWeight: 'bold', color: '#555'}}>🚑 核心需:</span>
-                                    {Object.entries(coreTools).map(([cond, count]) => (
-                                        <div key={cond} style={{
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: 4,
-                                            background: '#fff3e0',
-                                            border: '1px solid #ffe0b2',
-                                            padding: '2px 8px',
-                                            borderRadius: 12,
-                                            fontSize: 12
-                                        }}>
-                                            <MiniImg src={TOOL_INFO[cond].img} size={18} circle/>
-                                            <span style={{color: '#ef6c00'}}>{TOOL_INFO[cond].name}</span>
-                                            <strong style={{color: '#d32f2f', marginLeft: 2}}>x{count}</strong>
-                                        </div>
-                                    ))}
+                                    {Object.entries(coreTools).map(([cond, count]) => {
+                                        // 动态获取颜色样式 (Blue/Purple)
+                                        const style = getSpecialStyle(cond);
+                                        return (
+                                            <div key={cond} style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: 4,
+                                                background: style.bg, // 动态背景
+                                                border: `1px solid ${style.border}`, // 动态边框
+                                                padding: '2px 8px',
+                                                borderRadius: 12,
+                                                fontSize: 12
+                                            }}>
+                                                <MiniImg src={TOOL_INFO[cond].img} size={18} circle/>
+                                                <span
+                                                    style={{color: style.color}}>{TOOL_INFO[cond].name}</span> {/* 动态文字颜色 */}
+                                                <strong style={{color: '#d32f2f', marginLeft: 2}}>x{count}</strong>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             )}
                             {Object.keys(passengerTools).length > 0 && (
@@ -501,27 +529,81 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                             if (tasks.length === 0) return null;
                             const color = key === 'healthy' ? '#2e7d32' : key === 'less' ? '#1565c0' : key === 'much' ? '#6a1b9a' : '#c62828';
                             const label = key === 'healthy' ? '💚 健康' : key === 'less' ? '🥀 需不良' : key === 'much' ? '💊 需过剩' : '🐛 需生虫';
+
+                            // 仅针对需要救助的情况（不良/过剩）显示操作按钮
+                            const canRescue = key === 'less' || key === 'much';
+
                             return (
                                 <div key={key}
                                      style={{display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap'}}>
                                     <span style={{fontWeight: 'bold', color, width: 60}}>{label}:</span>
-                                    {aggregateTasks(tasks).map((t, i) => (
-                                        <div key={i} style={{
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: 4,
-                                            border: t.isPassenger ? '1px dashed #ccc' : `1px solid #e0e0e0`,
-                                            background: '#fff',
-                                            padding: '2px 6px',
-                                            borderRadius: 4,
-                                            opacity: t.isPassenger ? 0.7 : 1
-                                        }}>
-                                            <MiniImg src={getChildImg(t.starter, t.special as SpecialConditionType)}
-                                                     size={24} circle/>
-                                            <span>{MUSHROOM_CHILDREN[t.starter as MushroomChildId]}</span>
-                                            <span style={{fontWeight: 'bold', color, marginLeft: 2}}>x{t.count}</span>
-                                        </div>
-                                    ))}
+                                    {aggregateTasks(tasks).map((t, i) => {
+                                        // 计算扣除“培育中”后的剩余需求
+                                        const growing = growingCounts[t.targetId] || 0;
+                                        const remainingNeeded = Math.max(0, t.count - growing);
+
+                                        // 如果全部都在培育中，可以降低透明度或变灰
+                                        const isAllCovered = remainingNeeded === 0;
+
+                                        return (
+                                            <div key={i} style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: 4,
+                                                border: t.isPassenger ? '1px dashed #ccc' : `1px solid #e0e0e0`,
+                                                background: '#fff',
+                                                padding: '2px 6px',
+                                                borderRadius: 4,
+                                                opacity: isAllCovered ? 0.5 : (t.isPassenger ? 0.7 : 1)
+                                            }}>
+                                                <MiniImg
+                                                    src={getChildImg(t.starter, t.special as (SpecialConditionType | undefined))}
+                                                    size={24} circle/>
+                                                <span>{MUSHROOM_CHILDREN[t.starter as MushroomChildId]}</span>
+                                                <span style={{fontWeight: 'bold', color, marginLeft: 2}}>
+                                                    x{remainingNeeded}
+                                                    {/* 如果有正在培育的，显示总数提示 */}
+                                                    {growing > 0 && <span style={{
+                                                        fontSize: 10,
+                                                        color: '#999',
+                                                        fontWeight: 'normal'
+                                                    }}> (总{t.count})</span>}
+                                                </span>
+
+                                                {/* 橙色 -1 按钮 */}
+                                                {canRescue && remainingNeeded > 0 && (
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation(); // 防止折叠面板误触
+                                                            setGrowingCounts(prev => ({
+                                                                ...prev,
+                                                                [t.targetId]: (prev[t.targetId] || 0) + 1
+                                                            }));
+                                                        }}
+                                                        title="标记一个为培育中 (库存+1)"
+                                                        style={{
+                                                            background: '#fff3e0',
+                                                            color: '#e65100',
+                                                            border: '1px solid #ffcc80',
+                                                            borderRadius: '50%',
+                                                            width: 18,
+                                                            height: 18,
+                                                            padding: 0,
+                                                            fontSize: 12,
+                                                            cursor: 'pointer',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            marginLeft: 4,
+                                                            fontWeight: 'bold'
+                                                        }}
+                                                    >
+                                                        -1
+                                                    </button>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             )
                         })}
@@ -553,7 +635,8 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                             <MiniImg src={getMushroomImg(task.mushroom.id)} label={task.mushroom.name}
                                                      size={40}/>
                                         </Popover>
-                                        <div>
+                                        {/* 替换中间的信息显示 div */}
+                                        <div style={{flex: 1, minWidth: 0}}>
                                             <div style={{
                                                 fontWeight: 'bold',
                                                 fontSize: 14,
@@ -580,23 +663,92 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                     padding: '0 4px'
                                                 }}>新</span>}
                                             </div>
-                                            <div style={{fontSize: 12, color: '#666', marginTop: 2}}>
-                                                需: <span
-                                                style={{color: '#d32f2f', fontWeight: 'bold'}}>{task.countNeeded}</span>
-                                                <span style={{margin: '0 6px', color: '#ddd'}}>|</span> 存: <span
-                                                style={{color: '#2e7d32', fontWeight: 'bold'}}>{currentStock}</span>
+
+                                            <div style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'space-between',
+                                                marginTop: 4,
+                                                gap: 8
+                                            }}>
+                                                <div style={{display: 'flex', alignItems: 'center', gap: 6}}>
+                                                    <div
+                                                        title={`初始菌种: ${MUSHROOM_CHILDREN[task.mushroom.starter]}`}>
+                                                        <MiniImg
+                                                            src={getChildImg(task.mushroom.starter, task.mushroom.special)}
+                                                            size={20}
+                                                            circle
+                                                            style={{border: '1px solid #eee'}}
+                                                        />
+                                                    </div>
+                                                    {task.mushroom.save && task.mushroom.special && TOOL_INFO[task.mushroom.special] && (
+                                                        (() => {
+                                                            const style = getSpecialStyle(task.mushroom.special);
+                                                            return (
+                                                                <div style={{
+                                                                    fontSize: 11,
+                                                                    color: style.color,
+                                                                    background: style.bg,
+                                                                    padding: '1px 6px',
+                                                                    borderRadius: 4,
+                                                                    border: `1px solid ${style.border}`,
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    gap: 2,
+                                                                    whiteSpace: 'nowrap'
+                                                                }}>
+                                                                    <span>{TOOL_INFO[task.mushroom.special].name}</span>
+                                                                </div>
+                                                            );
+                                                        })()
+                                                    )}
+                                                </div>
+
+                                                {/* 右侧库存信息：新增“培育中”显示 */}
+                                                <div style={{fontSize: 12, color: '#666', whiteSpace: 'nowrap'}}>
+                                                    需: <span style={{
+                                                    color: '#d32f2f',
+                                                    fontWeight: 'bold'
+                                                }}>{task.countNeeded}</span>
+
+                                                    {/* 如果有培育中的数量，显示出来 */}
+                                                    {growingCounts[task.mushroom.id] ? (
+                                                        <>
+                                                            <span style={{margin: '0 4px', color: '#ddd'}}>|</span>
+                                                            <span style={{color: '#e65100', fontWeight: 'bold'}}
+                                                                  title="已救助但未长成">⏳{growingCounts[task.mushroom.id]}</span>
+                                                        </>
+                                                    ) : null}
+
+                                                    <span style={{margin: '0 4px', color: '#ddd'}}>|</span>
+                                                    存: <span
+                                                    style={{color: '#2e7d32', fontWeight: 'bold'}}>{currentStock}</span>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
-                                    <button onClick={() => onAddOne(task.mushroom.id)} style={{
-                                        ...btnStyle,
-                                        background: '#e8f5e9',
-                                        border: '1px solid #a5d6a7',
-                                        color: '#2e7d32',
-                                        fontWeight: 'bold',
-                                        padding: '6px 10px',
-                                        height: 'fit-content'
-                                    }} title="+1"> +1
+                                    {/* 替换 +1 按钮 */}
+                                    <button
+                                        onClick={() => {
+                                            // 1. 原本的操作：库存+1
+                                            onAddOne(task.mushroom.id);
+                                            // 2. 新操作：培育中数量-1 (如果大于0)
+                                            if (growingCounts[task.mushroom.id] > 0) {
+                                                setGrowingCounts(prev => ({
+                                                    ...prev,
+                                                    [task.mushroom.id]: prev[task.mushroom.id] - 1
+                                                }));
+                                            }
+                                        }}
+                                        style={{
+                                            ...btnStyle,
+                                            background: '#e8f5e9',
+                                            border: '1px solid #a5d6a7',
+                                            color: '#2e7d32',
+                                            fontWeight: 'bold',
+                                            padding: '6px 10px',
+                                            height: 'fit-content'
+                                        }} title="收获 (+1库存, -1培育中)"> +1
                                     </button>
                                 </div>
                             );
