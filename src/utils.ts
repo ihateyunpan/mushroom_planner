@@ -58,3 +58,5 @@ export const getSpecialStyle = (special: string) => {
 };
 
 export const PROTAGONISTS = ['刘辩', '傅融', '袁基', '左慈', '孙策'];
+
+export const RECENT_ID_COUNT = 10;

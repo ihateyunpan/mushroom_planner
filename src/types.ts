@@ -117,4 +117,6 @@ export interface Profile {
 export interface GlobalStorage {
     activeProfileId: string;
     profiles: Profile[];
+    // 新增：图鉴最近操作记录 (V3 版本加入)
+    recentIds: string[];
 }

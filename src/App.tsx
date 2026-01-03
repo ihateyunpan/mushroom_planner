@@ -12,6 +12,7 @@ import { EquipmentPanel } from './components/EquipmentPanel';
 import { InventoryPanel } from './components/InventoryPanel';
 import { OrderPanel } from './components/OrderPanel';
 import { PlanPanel } from './components/PlanPanel';
+import { RECENT_ID_COUNT } from "./utils.ts";
 
 // --- 优化：Lazy Loading 图鉴组件 ---
 const Encyclopedia = React.lazy(() =>
@@ -28,7 +29,8 @@ const SAFE_INITIAL_DATA: UserSaveData = {
 };
 
 const OLD_STORAGE_KEY = 'MUSHROOM_HELPER_DATA_V1';
-const STORAGE_KEY = 'MUSHROOM_HELPER_GLOBAL_V2';
+const V2_STORAGE_KEY = 'MUSHROOM_HELPER_GLOBAL_V2'; // 旧版本 Key，用于兼容读取
+const STORAGE_KEY = 'MUSHROOM_HELPER_GLOBAL_V3';     // 新版本 Key
 const TAB_STORAGE_KEY = 'MUSHROOM_HELPER_ACTIVE_TAB';
 const ENC_ORDER_ACTIVE_KEY = 'MUSHROOM_HELPER_ENC_ORDER_ACTIVE';
 
@@ -51,6 +53,7 @@ function App() {
     // --- Global State ---
     const [globalData, setGlobalData] = useState<GlobalStorage>(() => {
         try {
+            // 1. 尝试读取最新的 V3 数据
             const savedGlobal = localStorage.getItem(STORAGE_KEY);
             if (savedGlobal) {
                 const parsed = JSON.parse(savedGlobal);
@@ -58,23 +61,41 @@ function App() {
                     ...p,
                     data: {...SAFE_INITIAL_DATA, ...p.data}
                 }));
+                // 确保 recentIds 存在
+                if (!parsed.recentIds) parsed.recentIds = [];
                 return parsed;
             }
 
+            // 2. 如果没有 V3，尝试读取 V2 数据 (向后兼容)
+            const savedV2 = localStorage.getItem(V2_STORAGE_KEY);
+            if (savedV2) {
+                const parsed = JSON.parse(savedV2);
+                parsed.profiles = parsed.profiles.map((p: any) => ({
+                    ...p,
+                    data: {...SAFE_INITIAL_DATA, ...p.data}
+                }));
+                // 迁移：初始化空的 recentIds
+                return {...parsed, recentIds: []};
+            }
+
+            // 3. 尝试读取更早的 V1 数据
             const savedOld = localStorage.getItem(OLD_STORAGE_KEY);
             if (savedOld) {
                 const oldData = JSON.parse(savedOld);
                 return {
                     activeProfileId: 'default',
-                    profiles: [{id: 'default', name: '默认存档', data: {...SAFE_INITIAL_DATA, ...oldData}}]
+                    profiles: [{id: 'default', name: '默认存档', data: {...SAFE_INITIAL_DATA, ...oldData}}],
+                    recentIds: []
                 };
             }
         } catch (e) {
             console.error("Load failed", e);
         }
+        // 4. 默认初始化
         return {
             activeProfileId: 'default',
-            profiles: [{id: 'default', name: '默认存档', data: SAFE_INITIAL_DATA}]
+            profiles: [{id: 'default', name: '默认存档', data: SAFE_INITIAL_DATA}],
+            recentIds: []
         };
     });
 
@@ -96,14 +117,14 @@ function App() {
         }
     });
 
-    // 新增：最近操作记录状态提升到 App
-    const [recentIds, setRecentIds] = useState<string[]>([]);
-
+    // 修改：addToRecent 直接更新 globalData，实现持久化
     const addToRecent = (ids: string | string[]) => {
-        setRecentIds(prev => {
+        setGlobalData(prev => {
+            const currentRecents = prev.recentIds || [];
             const newItems = Array.isArray(ids) ? ids : [ids];
-            const filteredPrev = prev.filter(pid => !newItems.includes(pid));
-            return [...newItems, ...filteredPrev].slice(0, 10);
+            const filteredPrev = currentRecents.filter(pid => !newItems.includes(pid));
+            const updatedList = [...newItems, ...filteredPrev].slice(0, RECENT_ID_COUNT);
+            return {...prev, recentIds: updatedList};
         });
     };
 
@@ -221,6 +242,7 @@ function App() {
             data: SAFE_INITIAL_DATA
         };
         setGlobalData(prev => ({
+            ...prev,
             activeProfileId: newId,
             profiles: [...prev.profiles, newProfile]
         }));
@@ -235,6 +257,7 @@ function App() {
                 newActiveId = newProfiles[0].id;
             }
             return {
+                ...prev,
                 activeProfileId: newActiveId,
                 profiles: newProfiles
             };
@@ -279,6 +302,7 @@ function App() {
                 if (userChoice) {
                     const newId = Date.now().toString();
                     setGlobalData(prev => ({
+                        ...prev,
                         activeProfileId: newId,
                         profiles: [...prev.profiles, {
                             id: newId,
@@ -345,6 +369,8 @@ function App() {
                         ...p,
                         data: {...SAFE_INITIAL_DATA, ...p.data}
                     }));
+                    // 兼容旧备份：如果没有 recentIds，则补上空数组
+                    if (!json.recentIds) json.recentIds = [];
                     setGlobalData(json);
                     alert(`✅ 成功恢复全量备份 (${json.profiles.length} 个存档)`);
                 } else {
@@ -359,6 +385,7 @@ function App() {
     };
 
     const handleExport = () => {
+        // 直接导出 globalData，现在包含了 recentIds
         const blob = new Blob([JSON.stringify(globalData)], {type: 'application/json'});
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
@@ -548,9 +575,9 @@ function App() {
                         unlockedWoods={data.unlockedWoods}
                         unlockedLights={data.unlockedLights}
                         unlockedHumidifiers={data.unlockedHumidifiers}
-                        // 传递库存和最近记录
                         inventory={data.inventory}
-                        recentIds={recentIds}
+                        // 读取 globalData 中的最近记录
+                        recentIds={globalData.recentIds || []}
                     />
                 </Suspense>
             ) : (

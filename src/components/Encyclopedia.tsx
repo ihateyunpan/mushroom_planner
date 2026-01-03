@@ -3,7 +3,7 @@ import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { MUSHROOM_CHILDREN, MUSHROOM_DB } from '../database';
 import type { HumidifierType, LightType, MushroomDef, WoodType } from '../types';
 import { Humidifiers, Lights, MushroomChildIds, SpecialConditions, TimeRanges, Woods } from '../types';
-import { getChildImg, getMushroomImg, TOOL_INFO } from '../utils';
+import { getChildImg, getMushroomImg, RECENT_ID_COUNT, TOOL_INFO } from '../utils';
 import { CollapsibleSection, EnvBadge, MiniImg } from './Common';
 
 // --- 辅助函数 ---
@@ -487,12 +487,7 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
             {recentMushrooms.length > 0 && (
                 <CollapsibleSection
                     title={
-                        <span>🕒 最近操作 <span
-                            style={{
-                                fontSize: 12,
-                                fontWeight: 'normal',
-                                color: '#0277bd'
-                            }}>(本次会话记录)</span></span>
+                        <span>🕒 最近{RECENT_ID_COUNT}次操作</span>
                     }
                     defaultOpen={false}
                     headerBg="#e1f5fe"

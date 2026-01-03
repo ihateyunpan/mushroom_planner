@@ -1,5 +1,5 @@
 // src/components/PlanPanel.tsx
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { MUSHROOM_CHILDREN, MUSHROOM_DB } from '../database';
 import type { CalculationResult, MissingItem, PlanBatch, PlanTask } from '../logic';
 import type { MushroomChildId, Order, SpecialConditionType } from '../types';
@@ -27,16 +27,10 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                     }) => {
     const [activePopoverId, setActivePopoverId] = useState<string | null>(null);
     const [isFilterOpen, setIsFilterOpen] = useState(false);
-
-    // 新增：移动端导航相关状态
-    const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
     const [isNavOpen, setIsNavOpen] = useState(false);
 
-    useEffect(() => {
-        const handleResize = () => setIsMobile(window.innerWidth <= 768);
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
-    }, []);
+    // 新增：Tab 状态，默认显示白天
+    const [activeTimeTab, setActiveTimeTab] = useState<'day' | 'night'>('day');
 
     const scrollToId = (id: string) => {
         const el = document.getElementById(id);
@@ -666,24 +660,76 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                 ) : (
                     <div style={{display: 'flex', flexDirection: 'column', gap: 30}}>
                         {showSplitLayout ? (
-                            <>
-                                {dayBatches.length > 0 && <div style={{
-                                    background: '#fff8e1',
-                                    padding: 15,
-                                    borderRadius: 8,
-                                    border: '1px solid #ffecb3'
-                                }}><h3 style={{marginTop: 0, color: '#f57f17'}}>☀️
-                                    白天场</h3>{dayBatches.map((batch, i) => renderBatch(batch, i, batch.env.time === '任意'))}
-                                </div>}
-                                {nightBatches.length > 0 && <div style={{
-                                    background: '#e8eaf6',
-                                    padding: 15,
-                                    borderRadius: 8,
-                                    border: '1px solid #c5cae9'
-                                }}><h3 style={{marginTop: 0, color: '#3949ab'}}>🌙
-                                    夜晚场</h3>{nightBatches.map((batch, i) => renderBatch(batch, i, batch.env.time === '任意'))}
-                                </div>}
-                            </>
+                            <div style={{display: 'flex', flexDirection: 'column', gap: 15}}>
+                                {/* 新增：Tab 切换按钮 */}
+                                <div style={{display: 'flex', gap: 10}}>
+                                    <button
+                                        onClick={() => setActiveTimeTab('day')}
+                                        style={{
+                                            flex: 1,
+                                            padding: '10px',
+                                            borderRadius: 8,
+                                            border: activeTimeTab === 'day' ? '2px solid #ffecb3' : '1px solid #eee',
+                                            background: activeTimeTab === 'day' ? '#fff8e1' : '#f9f9f9',
+                                            color: activeTimeTab === 'day' ? '#f57f17' : '#999',
+                                            fontWeight: 'bold',
+                                            fontSize: 14,
+                                            cursor: 'pointer'
+                                        }}
+                                    >
+                                        ☀️ 白天场 ({dayBatches.length})
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveTimeTab('night')}
+                                        style={{
+                                            flex: 1,
+                                            padding: '10px',
+                                            borderRadius: 8,
+                                            border: activeTimeTab === 'night' ? '2px solid #c5cae9' : '1px solid #eee',
+                                            background: activeTimeTab === 'night' ? '#e8eaf6' : '#f9f9f9',
+                                            color: activeTimeTab === 'night' ? '#3949ab' : '#999',
+                                            fontWeight: 'bold',
+                                            fontSize: 14,
+                                            cursor: 'pointer'
+                                        }}
+                                    >
+                                        🌙 夜晚场 ({nightBatches.length})
+                                    </button>
+                                </div>
+
+                                {/* 新增：Tab 内容显示 */}
+                                {activeTimeTab === 'day' ? (
+                                    <div style={{
+                                        background: '#fff8e1',
+                                        padding: 15,
+                                        borderRadius: 8,
+                                        border: '1px solid #ffecb3',
+                                        minHeight: 200
+                                    }}>
+                                        {dayBatches.map((batch, i) => renderBatch(batch, i, batch.env.time === '任意'))}
+                                        {dayBatches.length === 0 && <div style={{
+                                            textAlign: 'center',
+                                            color: '#999',
+                                            padding: 20
+                                        }}>本时段暂无专属任务</div>}
+                                    </div>
+                                ) : (
+                                    <div style={{
+                                        background: '#e8eaf6',
+                                        padding: 15,
+                                        borderRadius: 8,
+                                        border: '1px solid #c5cae9',
+                                        minHeight: 200
+                                    }}>
+                                        {nightBatches.map((batch, i) => renderBatch(batch, i, batch.env.time === '任意'))}
+                                        {nightBatches.length === 0 && <div style={{
+                                            textAlign: 'center',
+                                            color: '#999',
+                                            padding: 20
+                                        }}>本时段暂无专属任务</div>}
+                                    </div>
+                                )}
+                            </div>
                         ) : (
                             filteredBatches.length > 0 && (() => {
                                 const config = getSinglePanelConfig();
