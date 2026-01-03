@@ -1044,34 +1044,48 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                     </div>
                                     {groupName !== '图鉴' && (
                                         <div style={{paddingLeft: 10, display: 'flex', flexDirection: 'column'}}>
-                                            {groupOrders.map(order => (
-                                                <label key={order.id} style={{
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: 6,
-                                                    padding: '2px 4px',
-                                                    fontSize: 12,
-                                                    cursor: 'pointer'
-                                                }}>
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={filters.orderIds.includes(order.id)}
-                                                        onChange={e => {
-                                                            const checked = e.target.checked;
-                                                            onUpdateFilters(prev => ({
-                                                                ...prev,
-                                                                orderIds: checked ? [...prev.orderIds, order.id] : prev.orderIds.filter(id => id !== order.id)
-                                                            }));
-                                                        }}
-                                                    />
-                                                    <span style={{
-                                                        whiteSpace: 'nowrap',
-                                                        overflow: 'hidden',
-                                                        textOverflow: 'ellipsis',
-                                                        flex: 1
-                                                    }}>{order.name}</span>
-                                                </label>
-                                            ))}
+                                            {groupOrders.map(order => {
+                                                // 新增：判断是否可完成，用于加样式
+                                                const isReady = order.items.length > 0 && order.items.every(i => (inventory[i.mushroomId] || 0) >= i.count);
+
+                                                return (
+                                                    <label key={order.id} style={{
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: 6,
+                                                        padding: '2px 4px',
+                                                        fontSize: 12,
+                                                        cursor: 'pointer',
+                                                        // 新增：给可完成的订单加个淡绿色背景或高亮
+                                                        background: isReady ? '#e8f5e9' : 'transparent',
+                                                        borderRadius: 4
+                                                    }}>
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={filters.orderIds.includes(order.id)}
+                                                            onChange={e => {
+                                                                /* ... 保持不变 ... */
+                                                                const checked = e.target.checked;
+                                                                onUpdateFilters(prev => ({
+                                                                    ...prev,
+                                                                    orderIds: checked ? [...prev.orderIds, order.id] : prev.orderIds.filter(id => id !== order.id)
+                                                                }));
+                                                            }}
+                                                        />
+                                                        <span style={{
+                                                            whiteSpace: 'nowrap',
+                                                            overflow: 'hidden',
+                                                            textOverflow: 'ellipsis',
+                                                            flex: 1,
+                                                            // 新增：可完成订单文字加粗变绿
+                                                            fontWeight: isReady ? 'bold' : 'normal',
+                                                            color: isReady ? '#2e7d32' : '#333'
+                                                        }}>
+                                                            {isReady ? '✅ ' : ''}{order.name}
+                                                        </span>
+                                                    </label>
+                                                );
+                                            })}
                                         </div>
                                     )}
                                 </div>
