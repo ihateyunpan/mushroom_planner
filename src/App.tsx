@@ -368,10 +368,12 @@ function App() {
     };
 
     // --- Order CRUD Operations ---
-    const addOrder = () => {
-        if (!newOrderName.trim()) return;
+    const addOrder = (nameOverride?: string) => {
+        const finalName = nameOverride || newOrderName;
+        if (!finalName.trim()) return;
         const newId = Date.now().toString();
-        setData(p => ({...p, orders: [{id: newId, name: newOrderName, items: [], active: true}, ...p.orders]}));
+
+        setData(p => ({...p, orders: [{id: newId, name: finalName, items: [], active: true}, ...p.orders]}));
         setNewOrderName('');
         setEditingOrderIds(p => new Set(p).add(newId));
     };

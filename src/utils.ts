@@ -56,3 +56,5 @@ export const getSpecialStyle = (special: string) => {
             return {bg: '#fff3e0', color: '#ef6c00', icon: '⚠️', border: '#ffe0b2'}; // 橙：默认
     }
 };
+
+export const PROTAGONISTS = ['刘辩', '傅融', '袁基', '左慈', '孙策'];

@@ -1,7 +1,7 @@
 // src/components/OrderPanel.tsx
-import React, { useCallback, useMemo } from 'react'; // 引入 useCallback
+import React, { useCallback, useMemo, useState } from 'react';
 import { MUSHROOM_DB } from '../database';
-import { getMushroomImg } from '../utils';
+import { getMushroomImg, PROTAGONISTS } from '../utils';
 import { CollapsibleSection, MiniImg, MushroomSelector } from './Common';
 import type { HumidifierType, LightType, Order, WoodType } from '../types';
 
@@ -11,7 +11,7 @@ interface OrderPanelProps {
     onToggleVirtualOrder: (active: boolean) => void;
     newOrderName: string;
     onNewOrderNameChange: (val: string) => void;
-    onAddOrder: () => void;
+    onAddOrder: (nameOverride?: string) => void;
     editingOrderIds: Set<string>;
     onToggleEdit: (id: string, isEditing: boolean) => void;
     onDeleteOrder: (id: string) => void;
@@ -26,54 +26,53 @@ interface OrderPanelProps {
     inventory: Record<string, number>;
 }
 
-// 修改点 3: 将 StatusBadge 移出组件外部 (静态组件)
+// 静态组件：状态徽章
 const StatusBadge: React.FC<{ active: boolean; equipReady: boolean; stockReady: boolean }> = ({
                                                                                                   active,
                                                                                                   equipReady,
                                                                                                   stockReady
                                                                                               }) => {
     if (!active) {
-        return (
-            <span style={{
-                fontSize: 11, background: '#f5f5f5', color: '#999',
-                padding: '2px 6px', borderRadius: 4, border: '1px solid #ddd',
-                display: 'flex', alignItems: 'center', gap: 4
-            }}>
-                ⏸️ 已暂停
-            </span>
-        );
+        return <span style={{
+            fontSize: 11,
+            background: '#f5f5f5',
+            color: '#999',
+            padding: '2px 6px',
+            borderRadius: 4,
+            border: '1px solid #ddd'
+        }}>⏸️ 已暂停</span>;
     }
     if (stockReady) {
-        return (
-            <span style={{
-                fontSize: 11, background: '#e8f5e9', color: '#2e7d32',
-                padding: '2px 6px', borderRadius: 4, border: '1px solid #a5d6a7',
-                fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 4
-            }}>
-                ✅ 可完成
-            </span>
-        );
+        return <span style={{
+            fontSize: 11,
+            background: '#e8f5e9',
+            color: '#2e7d32',
+            padding: '2px 6px',
+            borderRadius: 4,
+            border: '1px solid #a5d6a7',
+            fontWeight: 'bold'
+        }}>✅ 可完成</span>;
     }
     if (equipReady) {
-        return (
-            <span style={{
-                fontSize: 11, background: '#e3f2fd', color: '#1565c0',
-                padding: '2px 6px', borderRadius: 4, border: '1px solid #90caf9',
-                fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 4
-            }}>
-                🚀 可开始
-            </span>
-        );
+        return <span style={{
+            fontSize: 11,
+            background: '#e3f2fd',
+            color: '#1565c0',
+            padding: '2px 6px',
+            borderRadius: 4,
+            border: '1px solid #90caf9',
+            fontWeight: 'bold'
+        }}>🚀 可开始</span>;
     }
-    return (
-        <span style={{
-            fontSize: 11, background: '#fff3e0', color: '#ef6c00',
-            padding: '2px 6px', borderRadius: 4, border: '1px solid #ffe0b2',
-            fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 4
-        }}>
-            ⚠️ 缺道具
-        </span>
-    );
+    return <span style={{
+        fontSize: 11,
+        background: '#fff3e0',
+        color: '#ef6c00',
+        padding: '2px 6px',
+        borderRadius: 4,
+        border: '1px solid #ffe0b2',
+        fontWeight: 'bold'
+    }}>⚠️ 缺道具</span>;
 };
 
 export const OrderPanel: React.FC<OrderPanelProps> = ({
@@ -96,8 +95,20 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                                                           unlockedHumidifiers,
                                                           inventory
                                                       }) => {
+    // 筛选状态: null(全部) | 'READY'(可完成) | 'OTHER'(其他) | 男主名字
+    const [activeProtagonistFilter, setActiveProtagonistFilter] = useState<string | null>(null);
 
-    // 修改点 2: 使用 useCallback 包裹辅助函数，使其在依赖不变时保持引用稳定
+    const handleQuickCreate = (name: string) => {
+        const existingCount = orders.filter(o => o.name.includes(name)).length;
+        let nextIndex = existingCount + 1;
+        let candidateName = `${name}${nextIndex}`;
+        while (orders.some(o => o.name === candidateName)) {
+            nextIndex++;
+            candidateName = `${name}${nextIndex}`;
+        }
+        onAddOrder(candidateName);
+    };
+
     const isOrderReady = useCallback((order: Order) => {
         if (order.items.length === 0) return true;
         return order.items.every(item => {
@@ -120,8 +131,21 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
         });
     }, [inventory]);
 
+    // 过滤并排序订单
     const sortedOrders = useMemo(() => {
-        const withIndex = orders.map((order, index) => ({order, index}));
+        let filtered = orders;
+
+        // 1. 筛选逻辑
+        if (activeProtagonistFilter === 'READY') {
+            // 筛选库存充足的 (包括暂停和未暂停)
+            filtered = orders.filter(o => checkStockReady(o));
+        } else if (activeProtagonistFilter === 'OTHER') {
+            filtered = orders.filter(o => !PROTAGONISTS.some(p => o.name.includes(p)));
+        } else if (activeProtagonistFilter) {
+            filtered = orders.filter(o => o.name.includes(activeProtagonistFilter));
+        }
+
+        const withIndex = filtered.map((order, index) => ({order, index}));
 
         return withIndex.sort((a, b) => {
             const orderA = a.order;
@@ -134,7 +158,6 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
             if (orderA.active !== orderB.active) return orderA.active ? -1 : 1;
 
             if (orderA.active) {
-                // 现在可以在 useMemo 内部安全调用这些稳定的 callback
                 const stockA = checkStockReady(orderA);
                 const stockB = checkStockReady(orderB);
                 if (stockA !== stockB) return stockA ? -1 : 1;
@@ -146,7 +169,21 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
 
             return a.index - b.index;
         }).map(item => item.order);
-    }, [orders, editingOrderIds, checkStockReady, checkEquipmentReady]); // 依赖项改为稳定的 callback
+    }, [orders, editingOrderIds, checkStockReady, checkEquipmentReady, activeProtagonistFilter]);
+
+    // 通用按钮样式
+    const filterBtnStyle = {
+        padding: '6px 14px', // 稍微加大点击区域
+        borderRadius: 20,    // 更圆润
+        border: '1px solid',
+        fontSize: 13,
+        cursor: 'pointer',
+        whiteSpace: 'nowrap' as const,
+        transition: 'all 0.2s',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+    };
 
     return (
         <CollapsibleSection
@@ -167,38 +204,143 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
             headerBg="#e3f2fd"
             headerColor="#1565c0"
         >
-            <div style={{display: 'flex', gap: 10, marginBottom: 15}}>
-                <input
-                    placeholder="新订单名称 (如: 主线任务3)"
-                    value={newOrderName}
-                    onChange={e => onNewOrderNameChange(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && onAddOrder()}
-                    style={{
-                        flex: 1, padding: '8px 12px', borderRadius: 4,
-                        border: '1px solid #ccc', outline: 'none'
-                    }}
-                />
-                <button
-                    onClick={onAddOrder}
-                    disabled={!newOrderName.trim()}
-                    style={{
-                        padding: '8px 20px', borderRadius: 4, border: 'none',
-                        background: newOrderName.trim() ? '#1976d2' : '#e0e0e0',
-                        color: '#fff', cursor: newOrderName.trim() ? 'pointer' : 'not-allowed',
-                        fontWeight: 'bold'
-                    }}
-                >
-                    添加
-                </button>
+            {/* 改版后的快速筛选器：双行布局 */}
+            <div style={{display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 15}}>
+
+                {/* 第一行：功能性筛选 (全部、可完成、其他) */}
+                <div style={{display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center'}}>
+                    <button
+                        onClick={() => setActiveProtagonistFilter(null)}
+                        style={{
+                            ...filterBtnStyle,
+                            background: activeProtagonistFilter === null ? '#1565c0' : '#fff',
+                            color: activeProtagonistFilter === null ? '#fff' : '#666',
+                            borderColor: activeProtagonistFilter === null ? '#1565c0' : '#ddd',
+                            fontWeight: activeProtagonistFilter === null ? 'bold' : 'normal',
+                            flex: 1, // 在手机上平分宽度
+                            minWidth: 'fit-content'
+                        }}
+                    >
+                        全部
+                    </button>
+
+                    <button
+                        onClick={() => setActiveProtagonistFilter(activeProtagonistFilter === 'READY' ? null : 'READY')}
+                        style={{
+                            ...filterBtnStyle,
+                            background: activeProtagonistFilter === 'READY' ? '#e8f5e9' : '#fff',
+                            color: activeProtagonistFilter === 'READY' ? '#2e7d32' : '#2e7d32',
+                            borderColor: activeProtagonistFilter === 'READY' ? '#2e7d32' : '#a5d6a7',
+                            fontWeight: 'bold',
+                            boxShadow: activeProtagonistFilter === 'READY' ? '0 2px 4px rgba(46, 125, 50, 0.2)' : 'none',
+                            flex: 1.5, // 稍微宽一点强调
+                            minWidth: 'fit-content'
+                        }}
+                    >
+                        ✅ 可完成
+                    </button>
+
+                    <button
+                        onClick={() => setActiveProtagonistFilter(activeProtagonistFilter === 'OTHER' ? null : 'OTHER')}
+                        style={{
+                            ...filterBtnStyle,
+                            background: activeProtagonistFilter === 'OTHER' ? '#e3f2fd' : '#fff',
+                            color: activeProtagonistFilter === 'OTHER' ? '#1565c0' : '#666',
+                            borderColor: activeProtagonistFilter === 'OTHER' ? '#1565c0' : '#ddd',
+                            fontWeight: activeProtagonistFilter === 'OTHER' ? 'bold' : 'normal',
+                            flex: 1,
+                            minWidth: 'fit-content'
+                        }}
+                    >
+                        其他
+                    </button>
+                </div>
+
+                {/* 第二行：男主筛选 */}
+                <div style={{display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center'}}>
+                    {PROTAGONISTS.map(name => (
+                        <button
+                            key={name}
+                            onClick={() => setActiveProtagonistFilter(name === activeProtagonistFilter ? null : name)}
+                            style={{
+                                ...filterBtnStyle,
+                                padding: '5px 12px', // 男主名字较短，稍微紧凑一点
+                                background: activeProtagonistFilter === name ? '#e3f2fd' : '#fff',
+                                color: activeProtagonistFilter === name ? '#1565c0' : '#666',
+                                borderColor: activeProtagonistFilter === name ? '#1565c0' : '#ddd',
+                                fontWeight: activeProtagonistFilter === name ? 'bold' : 'normal',
+                                flexGrow: 1, // 让按钮铺满行，视觉更整齐
+                                maxWidth: 100 // 限制最大宽度，防止在大屏上太长
+                            }}
+                        >
+                            {name}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            {/* 新增/快速创建区域 */}
+            <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8,
+                marginBottom: 15,
+                background: '#f5f5f5',
+                padding: 10,
+                borderRadius: 8
+            }}>
+                <div style={{display: 'flex', gap: 10}}>
+                    <input
+                        placeholder="新订单名称..."
+                        value={newOrderName}
+                        onChange={e => onNewOrderNameChange(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && onAddOrder()}
+                        style={{
+                            flex: 1,
+                            padding: '8px 12px',
+                            borderRadius: 4,
+                            border: '1px solid #ccc',
+                            outline: 'none'
+                        }}
+                    />
+                    <button
+                        onClick={() => onAddOrder()}
+                        disabled={!newOrderName.trim()}
+                        style={{
+                            padding: '8px 20px', borderRadius: 4, border: 'none',
+                            background: newOrderName.trim() ? '#1976d2' : '#e0e0e0',
+                            color: '#fff', cursor: newOrderName.trim() ? 'pointer' : 'not-allowed',
+                            fontWeight: 'bold'
+                        }}
+                    >
+                        添加
+                    </button>
+                </div>
+                <div style={{display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap'}}>
+                    <span style={{fontSize: 12, color: '#888', whiteSpace: 'nowrap'}}>⚡ 快速创建:</span>
+                    {PROTAGONISTS.map(name => (
+                        <button
+                            key={name}
+                            onClick={() => handleQuickCreate(name)}
+                            style={{
+                                padding: '2px 8px', borderRadius: 4, border: '1px solid #ddd',
+                                background: '#fff', fontSize: 12, cursor: 'pointer', color: '#555',
+                                whiteSpace: 'nowrap'
+                            }}
+                            title={`自动创建 "${name}N" 并开始编辑`}
+                        >
+                            {name}
+                        </button>
+                    ))}
+                </div>
             </div>
 
             <div style={{display: 'flex', flexDirection: 'column', gap: 10}}>
-                {/* 虚拟图鉴订单 */}
+                {/* 虚拟图鉴订单 (永远显示) */}
                 {virtualOrder && (
                     <div style={{
                         border: virtualOrder.active ? '1px solid #ba68c8' : '1px dashed #ccc',
-                        borderRadius: 8,
-                        padding: 12,
+                        borderRadius: 8, padding: 12,
                         background: virtualOrder.active ? '#f3e5f5' : '#fafafa',
                         opacity: virtualOrder.active ? 1 : 0.75,
                         transition: 'all 0.2s',
@@ -214,23 +356,30 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                                 </span>
                                 {virtualOrder.active ? (
                                     <span style={{
-                                        fontSize: 11, background: '#f3e5f5', color: '#8e24aa',
-                                        padding: '2px 6px', borderRadius: 4, border: '1px solid #e1bee7',
+                                        fontSize: 11,
+                                        background: '#f3e5f5',
+                                        color: '#8e24aa',
+                                        padding: '2px 6px',
+                                        borderRadius: 4,
+                                        border: '1px solid #e1bee7',
                                         fontWeight: 'bold'
                                     }}>自动</span>
                                 ) : (
                                     <StatusBadge active={false} equipReady={true} stockReady={false}/>
                                 )}
                             </div>
-                            <button
-                                onClick={() => onToggleVirtualOrder(!virtualOrder.active)}
-                                title={virtualOrder.active ? "暂停图鉴收集" : "恢复图鉴收集"}
-                                style={{
-                                    fontSize: 16, width: 34, height: 34, cursor: 'pointer',
-                                    background: '#fff', border: '1px solid #ddd', borderRadius: 6,
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center'
-                                }}
-                            >
+                            <button onClick={() => onToggleVirtualOrder(!virtualOrder.active)} style={{
+                                fontSize: 16,
+                                width: 34,
+                                height: 34,
+                                cursor: 'pointer',
+                                background: '#fff',
+                                border: '1px solid #ddd',
+                                borderRadius: 6,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                            }}>
                                 {virtualOrder.active ? '⏸️' : '▶️'}
                             </button>
                         </div>
@@ -238,16 +387,11 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                             <div style={{marginTop: 8, fontSize: 13, color: '#6a1b9a'}}>
                                 📊 收集进度：
                                 {(() => {
-                                    // items 里都是未收集的
                                     const totalUncollected = virtualOrder.items.length;
                                     const inStockButUncollected = virtualOrder.items.filter(i => (inventory[i.mushroomId] || 0) > 0).length;
                                     const completelyMissing = totalUncollected - inStockButUncollected;
-
-                                    return (
-                                        <span style={{fontWeight: 'bold'}}>
-                                            未收集：{completelyMissing}，有库存但未收集：{inStockButUncollected}
-                                        </span>
-                                    );
+                                    return <span
+                                        style={{fontWeight: 'bold'}}>未收集：{completelyMissing}，有库存但未收集：{inStockButUncollected}</span>;
                                 })()}
                             </div>
                         )}
@@ -264,16 +408,10 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
 
                     return (
                         <div key={order.id} style={{
-                            border: order.active
-                                ? (stockReady ? '1px solid #81c784' : (equipReady ? '1px solid #90caf9' : '1px solid #ffcc80'))
-                                : '1px dashed #ccc',
-                            borderRadius: 8,
-                            padding: 12,
-                            background: order.active
-                                ? (stockReady ? '#f1f8e9' : '#fff')
-                                : '#fafafa',
-                            opacity: order.active ? 1 : 0.75,
-                            transition: 'all 0.2s',
+                            border: order.active ? (stockReady ? '1px solid #81c784' : (equipReady ? '1px solid #90caf9' : '1px solid #ffcc80')) : '1px dashed #ccc',
+                            borderRadius: 8, padding: 12,
+                            background: order.active ? (stockReady ? '#f1f8e9' : '#fff') : '#fafafa',
+                            opacity: order.active ? 1 : 0.75, transition: 'all 0.2s',
                             boxShadow: isEditing ? '0 2px 8px rgba(0,0,0,0.1)' : 'none'
                         }}>
                             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
@@ -281,70 +419,73 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                                     <span style={{
                                         fontWeight: 'bold',
                                         fontSize: 15,
-                                        color: order.active ? '#333' : '#999',
+                                        color: order.active ? '#333' : '#999'
                                     }}>
                                         {order.name}
                                     </span>
                                     <StatusBadge active={order.active} equipReady={equipReady} stockReady={stockReady}/>
                                 </div>
-
                                 <div style={{display: 'flex', gap: 6}}>
-                                    <button
-                                        onClick={() => onToggleActive(order.id)}
-                                        title={order.active ? "暂停订单" : "恢复订单"}
-                                        style={{
-                                            fontSize: 16, width: 34, height: 34, cursor: 'pointer',
-                                            background: '#fff', border: '1px solid #ddd', borderRadius: 6,
-                                            display: 'flex', alignItems: 'center', justifyContent: 'center'
-                                        }}
-                                    >
+                                    <button onClick={() => onToggleActive(order.id)} style={{
+                                        fontSize: 16,
+                                        width: 34,
+                                        height: 34,
+                                        cursor: 'pointer',
+                                        background: '#fff',
+                                        border: '1px solid #ddd',
+                                        borderRadius: 6,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center'
+                                    }}>
                                         {order.active ? '⏸️' : '▶️'}
                                     </button>
-
-                                    <button
-                                        onClick={() => onArchiveOrder(order.id)}
-                                        title="完成归档 (扣除库存)"
-                                        style={{
-                                            fontSize: 16, width: 34, height: 34, cursor: 'pointer',
-                                            background: stockReady ? '#e8f5e9' : '#f5f5f5',
-                                            border: stockReady ? '1px solid #a5d6a7' : '1px solid #ddd',
-                                            borderRadius: 6,
-                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                            opacity: stockReady ? 1 : 0.5
-                                        }}
-                                    >
+                                    <button onClick={() => onArchiveOrder(order.id)} style={{
+                                        fontSize: 16,
+                                        width: 34,
+                                        height: 34,
+                                        cursor: 'pointer',
+                                        background: stockReady ? '#e8f5e9' : '#f5f5f5',
+                                        border: stockReady ? '1px solid #a5d6a7' : '1px solid #ddd',
+                                        borderRadius: 6,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        opacity: stockReady ? 1 : 0.5
+                                    }}>
                                         ✅
                                     </button>
-
-                                    <button
-                                        onClick={() => onToggleEdit(order.id, !isEditing)}
-                                        title="编辑订单"
-                                        style={{
-                                            fontSize: 16, width: 34, height: 34, cursor: 'pointer',
-                                            background: isEditing ? '#e3f2fd' : '#fff',
-                                            border: isEditing ? '1px solid #90caf9' : '1px solid #ddd',
-                                            borderRadius: 6,
-                                            display: 'flex', alignItems: 'center', justifyContent: 'center'
-                                        }}
-                                    >
+                                    <button onClick={() => onToggleEdit(order.id, !isEditing)} style={{
+                                        fontSize: 16,
+                                        width: 34,
+                                        height: 34,
+                                        cursor: 'pointer',
+                                        background: isEditing ? '#e3f2fd' : '#fff',
+                                        border: isEditing ? '1px solid #90caf9' : '1px solid #ddd',
+                                        borderRadius: 6,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center'
+                                    }}>
                                         {isEditing ? '💾' : '✏️'}
                                     </button>
-
-                                    <button
-                                        onClick={() => onDeleteOrder(order.id)}
-                                        title="删除订单"
-                                        style={{
-                                            fontSize: 16, width: 34, height: 34, cursor: 'pointer',
-                                            background: '#fff', border: '1px solid #ffcdd2', borderRadius: 6,
-                                            color: '#c62828',
-                                            display: 'flex', alignItems: 'center', justifyContent: 'center'
-                                        }}
-                                    >
+                                    <button onClick={() => onDeleteOrder(order.id)} style={{
+                                        fontSize: 16,
+                                        width: 34,
+                                        height: 34,
+                                        cursor: 'pointer',
+                                        background: '#fff',
+                                        border: '1px solid #ffcdd2',
+                                        borderRadius: 6,
+                                        color: '#c62828',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center'
+                                    }}>
                                         🗑️
                                     </button>
                                 </div>
                             </div>
-
                             {isEditing ? (
                                 <div style={{marginTop: 10, borderTop: '1px dashed #eee', paddingTop: 10}}>
                                     <div style={{display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10}}>
@@ -353,44 +494,40 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                                             if (!m) return null;
                                             return (
                                                 <div key={item.mushroomId} style={{
-                                                    display: 'flex', alignItems: 'center', gap: 5,
-                                                    background: '#fff', border: '1px solid #eee',
-                                                    padding: '2px 6px', borderRadius: 20,
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: 5,
+                                                    background: '#fff',
+                                                    border: '1px solid #eee',
+                                                    padding: '2px 6px',
+                                                    borderRadius: 20,
                                                     boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
                                                 }}>
                                                     <MiniImg src={getMushroomImg(m.id)} size={24} circle/>
                                                     <span style={{fontSize: 13}}>{m.name}</span>
-                                                    <input
-                                                        type="number"
-                                                        min={0}
-                                                        value={item.count === 0 ? '' : item.count}
-                                                        onChange={e => {
-                                                            const val = e.target.value;
-                                                            const num = val === '' ? 0 : parseInt(val);
-                                                            if (!isNaN(num) && num >= 0) {
-                                                                onUpdateItemCount(order.id, m.id, num);
-                                                            }
-                                                        }}
-                                                        style={{
-                                                            width: 50,
-                                                            padding: 2,
-                                                            textAlign: 'center',
-                                                            border: 'none',
-                                                            borderBottom: '1px solid #ccc',
-                                                            outline: 'none'
-                                                        }}
+                                                    <input type="number" min={0}
+                                                           value={item.count === 0 ? '' : item.count}
+                                                           onChange={e => {
+                                                               const val = e.target.value;
+                                                               const num = val === '' ? 0 : parseInt(val);
+                                                               if (!isNaN(num) && num >= 0) onUpdateItemCount(order.id, m.id, num);
+                                                           }}
+                                                           style={{
+                                                               width: 50,
+                                                               padding: 2,
+                                                               textAlign: 'center',
+                                                               border: 'none',
+                                                               borderBottom: '1px solid #ccc',
+                                                               outline: 'none'
+                                                           }}
                                                     />
-                                                    <span
-                                                        onClick={() => onRemoveItem(order.id, m.id)}
-                                                        style={{
-                                                            cursor: 'pointer',
-                                                            color: '#ccc',
-                                                            marginLeft: 2,
-                                                            fontSize: 14,
-                                                            fontWeight: 'bold'
-                                                        }}
-                                                        title="移除此项"
-                                                    >×</span>
+                                                    <span onClick={() => onRemoveItem(order.id, m.id)} style={{
+                                                        cursor: 'pointer',
+                                                        color: '#ccc',
+                                                        marginLeft: 2,
+                                                        fontSize: 14,
+                                                        fontWeight: 'bold'
+                                                    }} title="移除此项">×</span>
                                                 </div>
                                             );
                                         })}
@@ -405,12 +542,14 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                                             if (!m) return null;
                                             const currentStock = inventory[m.id] || 0;
                                             const isEnough = currentStock >= i.count;
-
                                             return (
                                                 <div key={i.mushroomId} style={{
-                                                    display: 'flex', alignItems: 'center', gap: 6,
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: 6,
                                                     background: order.active ? 'rgba(255,255,255,0.6)' : '#eee',
-                                                    padding: '2px 8px', borderRadius: 16,
+                                                    padding: '2px 8px',
+                                                    borderRadius: 16,
                                                     border: isEnough ? '1px solid rgba(0,0,0,0.05)' : '1px dashed #ffcc80',
                                                     fontSize: 12
                                                 }}>
@@ -419,9 +558,7 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                                                     <span style={{
                                                         fontWeight: 'bold',
                                                         color: isEnough ? '#2e7d32' : '#e65100'
-                                                    }}>
-                                                        {currentStock}/{i.count}
-                                                    </span>
+                                                    }}>{currentStock}/{i.count}</span>
                                                 </div>
                                             );
                                         })}

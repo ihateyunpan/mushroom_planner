@@ -169,6 +169,11 @@ const MushroomCardItem: React.FC<{
     );
 };
 
+const INITIAL_FILTERS = {
+    starter: 'all', wood: 'all', light: 'all', humidifier: 'all', time: 'all',
+    special: 'all', save: 'all', collection: 'all',
+};
+
 interface EncyclopediaProps {
     collectedIds: string[];
     onToggleCollection: (id: string) => void;
@@ -204,10 +209,7 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
         onBatchCollect(ids);
     };
 
-    const [filters, setFilters] = useState({
-        starter: 'all', wood: 'all', light: 'all', humidifier: 'all', time: 'all',
-        special: 'all', save: 'all', collection: 'all',
-    });
+    const [filters, setFilters] = useState(INITIAL_FILTERS);
     const [searchTerm, setSearchTerm] = useState('');
 
     const checkToolsReady = useCallback((m: { wood?: string, light?: string, humidifier?: string }) => {
@@ -366,21 +368,51 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
                 }
             >
                 <div style={{display: 'flex', flexDirection: 'column', gap: 15}}>
-                    <div style={{width: '100%'}}>
+                    {/* 将原来的 <div style={{width: '100%'}}>...</div> 替换为以下代码 */}
+                    <div style={{display: 'flex', gap: 10, alignItems: 'center', width: '100%'}}>
                         <input
                             placeholder="🔍 搜索菌种：输入名字或拼音首字母 (如: wnz)"
                             value={searchTerm}
                             onChange={e => setSearchTerm(e.target.value)}
                             style={{
-                                width: '100%',
+                                flex: 1, // 让输入框占据剩余空间
                                 padding: '10px',
                                 boxSizing: 'border-box',
                                 border: '1px solid #ccc',
                                 borderRadius: 4,
                                 fontSize: 14,
-                                background: '#f9f9f9'
+                                background: '#f9f9f9',
+                                outline: 'none',
+                                // 给输入框加个 focus 样式会让体验更好
+                                transition: 'border-color 0.2s'
                             }}
                         />
+                        <button
+                            onClick={() => {
+                                setFilters(INITIAL_FILTERS); // 确保你在文件头部定义了 INITIAL_FILTERS
+                                setSearchTerm('');
+                            }}
+                            title="重置所有筛选条件和搜索"
+                            style={{
+                                padding: '0 15px', // 左右留白
+                                height: 38,        // 高度与 input 大致对齐 (input padding 10 + font 14 + border 2 ≈ 38-40)
+                                background: '#fff',
+                                border: '1px solid #ccc',
+                                borderRadius: 4,
+                                cursor: 'pointer',
+                                color: '#666',
+                                fontSize: 13,
+                                whiteSpace: 'nowrap', // 防止文字换行
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 6,
+                                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.background = '#f5f5f5'}
+                            onMouseLeave={e => e.currentTarget.style.background = '#fff'}
+                        >
+                            <span>🔄</span> 重置
+                        </button>
                     </div>
                     {/* ... Select inputs kept same ... */}
                     <div style={{display: 'flex', flexWrap: 'wrap', gap: 15}}>
