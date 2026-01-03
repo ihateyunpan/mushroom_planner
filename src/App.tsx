@@ -2,8 +2,8 @@
 import React, { Suspense, useEffect, useMemo, useState } from 'react';
 import { MUSHROOM_DB } from './database';
 import { calculateOptimalRoute, type PlanTask } from './logic';
-import type { GlobalStorage, MushroomDef, UserSaveData } from './types';
-import { Humidifiers, Lights, Woods } from './types';
+import type { GlobalStorage, MushroomDef, Order, UserSaveData } from './types';
+import { Humidifiers, Lights, VIRTUAL_ORDER_ID, Woods } from './types';
 import './App.css';
 
 // 引入拆分后的组件
@@ -14,7 +14,6 @@ import { OrderPanel } from './components/OrderPanel';
 import { PlanPanel } from './components/PlanPanel';
 
 // --- 优化：Lazy Loading 图鉴组件 ---
-// 只有切换到图鉴 Tab 时，才会加载这个组件的代码
 const Encyclopedia = React.lazy(() =>
     import('./components/Encyclopedia').then(module => ({default: module.Encyclopedia}))
 );
@@ -31,8 +30,8 @@ const SAFE_INITIAL_DATA: UserSaveData = {
 const OLD_STORAGE_KEY = 'MUSHROOM_HELPER_DATA_V1';
 const STORAGE_KEY = 'MUSHROOM_HELPER_GLOBAL_V2';
 const TAB_STORAGE_KEY = 'MUSHROOM_HELPER_ACTIVE_TAB';
+const ENC_ORDER_ACTIVE_KEY = 'MUSHROOM_HELPER_ENC_ORDER_ACTIVE';
 
-// --- 简单的 Loading 组件 ---
 const LoadingSpinner = () => (
     <div style={{
         padding: '40px',
@@ -88,6 +87,26 @@ function App() {
         }
     });
 
+    const [isEncOrderActive, setIsEncOrderActive] = useState<boolean>(() => {
+        try {
+            const val = localStorage.getItem(ENC_ORDER_ACTIVE_KEY);
+            return val !== 'false';
+        } catch {
+            return true;
+        }
+    });
+
+    // 新增：最近操作记录状态提升到 App
+    const [recentIds, setRecentIds] = useState<string[]>([]);
+
+    const addToRecent = (ids: string | string[]) => {
+        setRecentIds(prev => {
+            const newItems = Array.isArray(ids) ? ids : [ids];
+            const filteredPrev = prev.filter(pid => !newItems.includes(pid));
+            return [...newItems, ...filteredPrev].slice(0, 10);
+        });
+    };
+
     const [newOrderName, setNewOrderName] = useState('');
     const [planVersion, setPlanVersion] = useState(0);
     const [editingOrderIds, setEditingOrderIds] = useState<Set<string>>(new Set());
@@ -109,6 +128,10 @@ function App() {
         }
     }, [activeTab]);
 
+    useEffect(() => {
+        localStorage.setItem(ENC_ORDER_ACTIVE_KEY, String(isEncOrderActive));
+    }, [isEncOrderActive]);
+
     // --- Data Proxy ---
     const currentProfile = globalData.profiles.find(p => p.id === globalData.activeProfileId) || globalData.profiles[0];
     const data = currentProfile.data;
@@ -126,18 +149,55 @@ function App() {
         });
     };
 
+    // --- Logic for Encyclopedia Order ---
+    const virtualEncyclopediaOrder: Order | null = useMemo(() => {
+        const collectedSet = new Set(data.collectedMushrooms || []);
+        const uncollectedItems = MUSHROOM_DB
+            .filter(m => !collectedSet.has(m.id))
+            .map(m => ({mushroomId: m.id, count: 1}));
+
+        if (uncollectedItems.length === 0) return null;
+
+        return {
+            id: VIRTUAL_ORDER_ID,
+            name: '✨ 自动：图鉴补全计划',
+            items: uncollectedItems,
+            active: isEncOrderActive
+        };
+    }, [data.collectedMushrooms, isEncOrderActive]);
+
+    // 修改点 3: toggleCollection 逻辑增强 (确认提示 & 记录)
     const toggleCollection = (id: string) => {
-        setData(prev => {
-            const list = prev.collectedMushrooms || [];
-            if (list.includes(id)) {
-                return {...prev, collectedMushrooms: list.filter(x => x !== id)};
-            } else {
-                return {...prev, collectedMushrooms: [...list, id]};
+        const list = data.collectedMushrooms || [];
+        const isCollected = list.includes(id);
+
+        if (isCollected) {
+            // 取消收集：检查库存
+            const currentStock = data.inventory[id] || 0;
+            if (currentStock > 0) {
+                // 修改点：确认后仅解除标记，不强制清空
+                if (!window.confirm(`⚠️ 该菌种库存还有 ${currentStock} 个。\n确认要取消“已收集”标记吗？\n(操作将仅移除图鉴标记，库存保留)`)) {
+                    return; // 用户取消，终止操作
+                }
             }
-        });
+            addToRecent(id);
+            setData(prev => ({
+                ...prev,
+                collectedMushrooms: (prev.collectedMushrooms || []).filter(x => x !== id)
+            }));
+        } else {
+            // 标记收集
+            addToRecent(id);
+            setData(prev => ({
+                ...prev,
+                collectedMushrooms: [...list, id]
+            }));
+        }
     };
 
     const handleBatchCollect = (ids: string[]) => {
+        if (ids.length === 0) return;
+        addToRecent(ids);
         setData(prev => {
             const currentSet = new Set(prev.collectedMushrooms || []);
             let hasChange = false;
@@ -193,7 +253,6 @@ function App() {
         }));
     };
 
-    // --- Import/Export Handlers ---
     const handleExportCurrent = () => {
         const blob = new Blob([JSON.stringify(data)], {type: 'application/json'});
         const a = document.createElement('a');
@@ -308,6 +367,7 @@ function App() {
         a.click();
     };
 
+    // --- Order CRUD Operations ---
     const addOrder = () => {
         if (!newOrderName.trim()) return;
         const newId = Date.now().toString();
@@ -386,24 +446,50 @@ function App() {
         }
     };
 
+    const allOrdersWithVirtual = useMemo(() => {
+        const list = [...data.orders];
+        if (virtualEncyclopediaOrder) {
+            list.push(virtualEncyclopediaOrder);
+        }
+        return list;
+    }, [data.orders, virtualEncyclopediaOrder]);
+
     const relevantMushrooms = useMemo(() => {
         const ids = new Set<string>();
-        data.orders.forEach(o => o.items.forEach(i => ids.add(i.mushroomId)));
+        allOrdersWithVirtual.forEach(o => o.items.forEach(i => ids.add(i.mushroomId)));
+        Object.keys(data.inventory).forEach(id => {
+            if (data.inventory[id] > 0) ids.add(id);
+        });
         return Array.from(ids).map(id => MUSHROOM_DB.find(m => m.id === id)).filter((m): m is MushroomDef => !!m).sort((a, b) => a.id.localeCompare(b.id));
-    }, [data.orders]);
+    }, [allOrdersWithVirtual, data.inventory]);
 
     const activeDemandMap = useMemo(() => {
         const map = new Map<string, number>();
-        data.orders.forEach(o => {
+        allOrdersWithVirtual.forEach(o => {
+            if (o.id === VIRTUAL_ORDER_ID) return;
             if (!o.active) return;
             o.items.forEach(i => {
                 map.set(i.mushroomId, (map.get(i.mushroomId) || 0) + i.count);
             });
         });
         return map;
-    }, [data.orders]);
+    }, [allOrdersWithVirtual]);
 
-    const calculationResult = useMemo(() => calculateOptimalRoute(data), [data, planVersion]);
+    const encyclopediaDemandMap = useMemo(() => {
+        const map = new Map<string, number>();
+        if (virtualEncyclopediaOrder && virtualEncyclopediaOrder.active) {
+            virtualEncyclopediaOrder.items.forEach(i => map.set(i.mushroomId, i.count));
+        }
+        return map;
+    }, [virtualEncyclopediaOrder]);
+
+    const calculationResult = useMemo(() => {
+        const computedData = {
+            ...data,
+            orders: allOrdersWithVirtual
+        };
+        return calculateOptimalRoute(computedData);
+    }, [data, allOrdersWithVirtual, planVersion]);
 
     return (
         <div className="app-container">
@@ -451,7 +537,6 @@ function App() {
                 </button>
             </div>
 
-            {/* 修改：使用 Suspense 包裹 lazy 组件 */}
             {activeTab === 'encyclopedia' ? (
                 <Suspense fallback={<LoadingSpinner/>}>
                     <Encyclopedia
@@ -461,6 +546,9 @@ function App() {
                         unlockedWoods={data.unlockedWoods}
                         unlockedLights={data.unlockedLights}
                         unlockedHumidifiers={data.unlockedHumidifiers}
+                        // 传递库存和最近记录
+                        inventory={data.inventory}
+                        recentIds={recentIds}
                     />
                 </Suspense>
             ) : (
@@ -472,10 +560,14 @@ function App() {
                             inventory={data.inventory}
                             relevantMushrooms={relevantMushrooms}
                             activeDemandMap={activeDemandMap}
+                            encyclopediaDemandMap={encyclopediaDemandMap}
                             onUpdate={updateInventory}
                         />
                         <OrderPanel
-                            orders={data.orders} newOrderName={newOrderName} onNewOrderNameChange={setNewOrderName}
+                            orders={data.orders}
+                            virtualOrder={virtualEncyclopediaOrder}
+                            onToggleVirtualOrder={(active) => setIsEncOrderActive(active)}
+                            newOrderName={newOrderName} onNewOrderNameChange={setNewOrderName}
                             onAddOrder={addOrder}
                             editingOrderIds={editingOrderIds} onToggleEdit={toggleOrderEdit} onDeleteOrder={deleteOrder}
                             onToggleActive={toggleOrderActive}
@@ -492,9 +584,20 @@ function App() {
                         plan={calculationResult}
                         onCompleteTask={handleCompleteTask}
                         onRefresh={() => setPlanVersion(v => v + 1)}
-                        orders={data.orders}
+                        orders={allOrdersWithVirtual}
                         inventory={data.inventory}
-                        onAddOne={handleAddOne}
+                        onAddOne={(id) => {
+                            // 功能点 2: 交互逻辑提示
+                            const isUncollected = !data.collectedMushrooms.includes(id);
+                            if (isUncollected) {
+                                if (window.confirm(`🎉 恭喜！这是你图鉴里未收集的菌种。\n是否要顺便标记为“已收集”？`)) {
+                                    toggleCollection(id);
+                                    // toggleCollection 内部现在已经会处理 addToRecent，所以不需要额外调用
+                                }
+                            }
+                            handleAddOne(id);
+                        }}
+                        collectedIds={data.collectedMushrooms || []}
                     />
                 </div>
             )}

@@ -8,6 +8,7 @@ interface InventoryPanelProps {
     inventory: Record<string, number>;
     relevantMushrooms: MushroomDef[];
     activeDemandMap: Map<string, number>;
+    encyclopediaDemandMap?: Map<string, number>; // 新增：图鉴需求
     onUpdate: (id: string, count: number) => void;
 }
 
@@ -15,10 +16,10 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                                                                   inventory,
                                                                   relevantMushrooms,
                                                                   activeDemandMap,
+                                                                  encyclopediaDemandMap,
                                                                   onUpdate
                                                               }) => {
     const [searchTerm, setSearchTerm] = useState('');
-    // 新增：控制详情弹窗的状态
     const [activePopoverId, setActivePopoverId] = useState<string | null>(null);
 
     const displayedMushrooms = useMemo(() => {
@@ -38,11 +39,11 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                         color: '#999',
                         fontSize: 13,
                         textAlign: 'center'
-                    }}>暂无活跃订单，请先添加订单。</div>
+                    }}>暂无活跃订单或库存，请先添加订单。</div>
             ) : (
                 <div style={{display: 'flex', flexDirection: 'column', gap: 10}}>
                     <input
-                        placeholder="🔍 搜索订单内菌种 (名字或拼音)..."
+                        placeholder="🔍 搜索 (名字或拼音首字母)..."
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
                         style={{
@@ -58,8 +59,13 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                     <div style={{maxHeight: 400, overflowY: 'auto'}}>
                         {displayedMushrooms.map(m => {
                             const currentCount = inventory[m.id] || 0;
-                            const requiredCount = activeDemandMap.get(m.id) || 0;
-                            const isDeficit = requiredCount > 0 && currentCount < requiredCount;
+                            // 普通订单需求
+                            const orderNeeded = activeDemandMap.get(m.id) || 0;
+                            const isOrderDeficit = orderNeeded > 0 && currentCount < orderNeeded;
+
+                            // 图鉴需求 (功能点 4)
+                            const encNeeded = encyclopediaDemandMap?.get(m.id) || 0;
+                            const isEncSatisfied = currentCount >= encNeeded; // 只要有1个就算满足图鉴
 
                             return (
                                 <div key={m.id} style={{
@@ -70,7 +76,6 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                                     borderBottom: '1px solid #f0f0f0'
                                 }}>
                                     <div style={{display: 'flex', alignItems: 'center', gap: 10, flex: 1}}>
-                                        {/* 修改：包裹 Popover 以显示培育详情 */}
                                         <Popover
                                             isOpen={activePopoverId === m.id}
                                             onOpenChange={(isOpen) => setActivePopoverId(isOpen ? m.id : null)}
@@ -80,22 +85,30 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                                                 src={getMushroomImg(m.id)}
                                                 label={m.name}
                                                 size={32}
-                                                // 增加 cursor pointer 提示可点击
                                                 style={{cursor: 'pointer'}}
                                             />
                                         </Popover>
 
                                         <div style={{display: 'flex', flexDirection: 'column'}}>
                                             <span style={{fontSize: 14}}>{m.name}</span>
-                                            {requiredCount > 0 && (
-                                                <span style={{
-                                                    fontSize: 11,
-                                                    color: isDeficit ? '#e53935' : '#aaa',
-                                                    fontWeight: isDeficit ? 'bold' : 'normal'
-                                                }}>
-                                                    需: {requiredCount}
-                                                </span>
-                                            )}
+                                            <div style={{display: 'flex', gap: 8, fontSize: 11}}>
+                                                {orderNeeded > 0 && (
+                                                    <span style={{
+                                                        color: isOrderDeficit ? '#e53935' : '#aaa',
+                                                        fontWeight: isOrderDeficit ? 'bold' : 'normal'
+                                                    }}>
+                                                        订单需: {orderNeeded}
+                                                    </span>
+                                                )}
+                                                {encNeeded > 0 && (
+                                                    <span style={{
+                                                        color: isEncSatisfied ? '#999' : '#2e7d32', // 完成变灰，未完成变绿
+                                                        fontWeight: isEncSatisfied ? 'normal' : 'bold'
+                                                    }}>
+                                                        {isEncSatisfied ? '图鉴: OK' : `图鉴需: ${encNeeded}`}
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                     <input type="number" min={0} value={currentCount === 0 ? '' : currentCount}
@@ -111,10 +124,10 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                                                width: 70,
                                                padding: 6,
                                                borderRadius: 4,
-                                               border: isDeficit ? '1px solid #ef9a9a' : '1px solid #ddd',
-                                               background: isDeficit ? '#ffebee' : '#fff',
+                                               border: isOrderDeficit ? '1px solid #ef9a9a' : '1px solid #ddd',
+                                               background: isOrderDeficit ? '#ffebee' : '#fff',
                                                textAlign: 'center',
-                                               color: isDeficit ? '#c62828' : '#000'
+                                               color: isOrderDeficit ? '#c62828' : '#000'
                                            }}
                                     />
                                 </div>

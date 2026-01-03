@@ -71,6 +71,8 @@ export const SpecialConditions = {
 } as const;
 export type SpecialConditionType = typeof SpecialConditions[keyof typeof SpecialConditions];
 
+// 常量：虚拟图鉴订单ID
+export const VIRTUAL_ORDER_ID = 'ENCYCLOPEDIA_VIRTUAL_ORDER';
 
 // --- 2. 核心数据模型 ---
 // 菌种定义 (数据库行)

@@ -3,9 +3,10 @@ import React, { useMemo, useState } from 'react';
 import { MUSHROOM_CHILDREN, MUSHROOM_DB } from '../database';
 import type { CalculationResult, MissingItem, PlanBatch, PlanTask } from '../logic';
 import type { MushroomChildId, Order, SpecialConditionType } from '../types';
-import { SpecialConditions, TimeRanges, Woods } from '../types';
+import { SpecialConditions, TimeRanges, VIRTUAL_ORDER_ID, Woods } from '../types';
 import { getChildImg, getMushroomImg, getSourceInfo, getToolIcon, TOOL_INFO } from '../utils';
-import { btnStyle, CollapsibleSection, EnvBadge, MiniImg, MushroomInfoCard, Popover } from './Common';
+import { btnStyle } from '../styles';
+import { CollapsibleSection, EnvBadge, MiniImg, MushroomInfoCard, Popover } from './Common';
 
 interface PlanPanelProps {
     plan: CalculationResult;
@@ -14,14 +15,15 @@ interface PlanPanelProps {
     orders: Order[];
     inventory: Record<string, number>;
     onAddOne: (id: string) => void;
+    collectedIds: string[]; // 新增：用于判断是否需要弹出“标记为已收集”
 }
 
 export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                         plan: {batches, missingSummary},
-                                                        onRefresh,
                                                         orders,
                                                         inventory,
-                                                        onAddOne
+                                                        onAddOne,
+                                                        collectedIds
                                                     }) => {
     // 状态管理
     const [activePopoverId, setActivePopoverId] = useState<string | null>(null);
@@ -31,7 +33,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
     const [filters, setFilters] = useState({
         wood: 'all',   // 'all' | WoodType
         status: 'all', // 'all' | 'ready' | 'missing'
-        orderIds: [] as string[] // 改为数组，支持多选。空数组代表"全部/无筛选"
+        orderIds: [] as string[]
     });
 
     // 辅助：检查订单库存是否就绪
@@ -59,15 +61,12 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
             }
             // 订单筛选 (多选逻辑)
             if (filters.orderIds.length > 0) {
-                // 只要批次里的任何一个任务，属于任何一个被选中的订单，就保留该批次
                 const isRelated = batch.tasks.some(task => {
-                    // 检查这个 task 对应的菌种，是否在 选中的订单需求里
                     return filters.orderIds.some(selectedOid => {
                         const order = orders.find(o => o.id === selectedOid);
                         return order && order.items.some(i => i.mushroomId === task.mushroom.id);
                     });
                 });
-
                 if (!isRelated) return false;
             }
 
@@ -129,7 +128,37 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
         });
         const relatedOrders = Array.from(relatedOrderMap.values());
 
-        // --- 分别统计核心和蹭车道具 ---
+        // 功能点 5/7: 排序相关订单，图鉴订单放最前
+        relatedOrders.sort((a, b) => {
+            // 1. 自动图鉴订单默认第1个
+            if (a.id === VIRTUAL_ORDER_ID) return -1;
+            if (b.id === VIRTUAL_ORDER_ID) return 1;
+
+            // 2. 如果有可完成的订单，也把它提前
+            const isAReady = checkOrderStockReady(a);
+            const isBReady = checkOrderStockReady(b);
+
+            // 如果一个可完成一个不可完成，可完成的排前面
+            if (isAReady !== isBReady) {
+                return isAReady ? -1 : 1;
+            }
+
+            // 3. 最后按名称排序
+            return a.name.localeCompare(b.name);
+        });
+        const hasVirtualOrder = relatedOrders.some(o => o.id === VIRTUAL_ORDER_ID);
+
+        // --- 功能点 2: 核心 vs 蹭车 同环境警告 ---
+        const timeWarningGroups: Record<string, { hasCore: boolean, hasPassenger: boolean }> = {};
+        batch.tasks.forEach(t => {
+            const key = `${t.mushroom.starter}-${t.mushroom.special || 'none'}`;
+            if (!timeWarningGroups[key]) timeWarningGroups[key] = {hasCore: false, hasPassenger: false};
+            if (t.isPassenger) timeWarningGroups[key].hasPassenger = true;
+            else timeWarningGroups[key].hasCore = true;
+        });
+        const showTimeWarning = Object.values(timeWarningGroups).some(g => g.hasCore && g.hasPassenger);
+
+
         const coreTools: Record<string, number> = {};
         const passengerTools: Record<string, number> = {};
 
@@ -195,6 +224,22 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                 title={
                     <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
                         <span>第{batchIndexMap.get(batch.id)}批: {batchTitleStr}</span>
+                        {hasVirtualOrder && (
+                            <span style={{
+                                fontSize: 11,
+                                background: '#f3e5f5', //淡紫色背景
+                                color: '#8e24aa',      // 深紫色文字
+                                border: '1px solid #e1bee7', // 紫色边框
+                                padding: '1px 6px',
+                                borderRadius: 4,
+                                fontWeight: 'bold',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 4
+                            }}>
+                                📖 图鉴补全
+                            </span>
+                        )}
                         {isFlexibleTime && <span style={{
                             fontSize: 11,
                             background: '#e0f7fa',
@@ -228,87 +273,104 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                         }}>
                             <span>关联订单:</span>
                             {relatedOrders.map(order => {
-                                const isReady = checkOrderStockReady(order);
+                                const isVirtual = order.id === VIRTUAL_ORDER_ID;
+                                const isReady = !isVirtual && checkOrderStockReady(order);
                                 const popoverKey = `order-${order.id}`;
+
                                 return (
                                     <Popover
                                         key={order.id}
                                         isOpen={activePopoverId === popoverKey}
                                         onOpenChange={(open) => setActivePopoverId(open ? popoverKey : null)}
                                         content={
-                                            <div style={{minWidth: 200, padding: 4}}>
-                                                <div style={{
-                                                    fontWeight: 'bold',
-                                                    borderBottom: '1px dashed #eee',
-                                                    paddingBottom: 6,
-                                                    marginBottom: 6,
-                                                    color: '#333',
-                                                    fontSize: 13,
-                                                    display: 'flex',
-                                                    justifyContent: 'space-between',
-                                                    alignItems: 'center'
-                                                }}>
-                                                    <span>🧾 {order.name}</span>
-                                                    {isReady && <span style={{
-                                                        fontSize: 10,
-                                                        background: '#e8f5e9',
-                                                        color: '#2e7d32',
-                                                        padding: '1px 4px',
-                                                        borderRadius: 4
-                                                    }}>可完成</span>}
+                                            // 功能点 5: 图鉴订单只展示进度
+                                            isVirtual ? (
+                                                <div style={{minWidth: 150, padding: 4}}>
+                                                    <div
+                                                        style={{fontWeight: 'bold', color: '#6a1b9a', marginBottom: 4}}>
+                                                        {order.name}
+                                                    </div>
+                                                    <div style={{fontSize: 12, color: '#333'}}>
+                                                        当前批次包含此计划所需菌种。<br/>
+                                                        请前往订单面板查看完整缺漏。
+                                                    </div>
                                                 </div>
-                                                <div style={{display: 'flex', flexDirection: 'column', gap: 8}}>
-                                                    {order.items.map(item => {
-                                                        const m = MUSHROOM_DB.find(d => d.id === item.mushroomId);
-                                                        if (!m) return null;
-                                                        const stock = inventory[item.mushroomId] || 0;
-                                                        const isEnough = stock >= item.count;
-                                                        return (
-                                                            <div key={item.mushroomId} style={{
-                                                                display: 'flex',
-                                                                alignItems: 'center',
-                                                                justifyContent: 'space-between',
-                                                                fontSize: 12
-                                                            }}>
-                                                                <div style={{
+                                            ) : (
+                                                <div style={{minWidth: 200, padding: 4}}>
+                                                    <div style={{
+                                                        fontWeight: 'bold',
+                                                        borderBottom: '1px dashed #eee',
+                                                        paddingBottom: 6,
+                                                        marginBottom: 6,
+                                                        color: '#333',
+                                                        fontSize: 13,
+                                                        display: 'flex',
+                                                        justifyContent: 'space-between',
+                                                        alignItems: 'center'
+                                                    }}>
+                                                        <span>🧾 {order.name}</span>
+                                                        {isReady && <span style={{
+                                                            fontSize: 10,
+                                                            background: '#e8f5e9',
+                                                            color: '#2e7d32',
+                                                            padding: '1px 4px',
+                                                            borderRadius: 4
+                                                        }}>可完成</span>}
+                                                    </div>
+                                                    <div style={{display: 'flex', flexDirection: 'column', gap: 8}}>
+                                                        {order.items.map(item => {
+                                                            const m = MUSHROOM_DB.find(d => d.id === item.mushroomId);
+                                                            if (!m) return null;
+                                                            const stock = inventory[item.mushroomId] || 0;
+                                                            const isEnough = stock >= item.count;
+                                                            return (
+                                                                <div key={item.mushroomId} style={{
                                                                     display: 'flex',
                                                                     alignItems: 'center',
-                                                                    gap: 6
+                                                                    justifyContent: 'space-between',
+                                                                    fontSize: 12
                                                                 }}>
-                                                                    <MiniImg src={getMushroomImg(m.id)} size={24}
-                                                                             circle/>
-                                                                    <span style={{color: '#555'}}>{m.name}</span>
-                                                                </div>
-                                                                <div style={{fontSize: 11}}>
-                                                                    <span style={{color: '#888'}}>需{item.count}</span>
-                                                                    <span style={{
-                                                                        margin: '0 4px',
-                                                                        color: '#eee'
-                                                                    }}>|</span>
-                                                                    <span style={{
-                                                                        color: isEnough ? '#2e7d32' : '#e65100',
-                                                                        fontWeight: 'bold'
+                                                                    <div style={{
+                                                                        display: 'flex',
+                                                                        alignItems: 'center',
+                                                                        gap: 6
                                                                     }}>
-                                                                        存{stock}
-                                                                    </span>
+                                                                        <MiniImg src={getMushroomImg(m.id)} size={24}
+                                                                                 circle/>
+                                                                        <span style={{color: '#555'}}>{m.name}</span>
+                                                                    </div>
+                                                                    <div style={{fontSize: 11}}>
+                                                                        <span
+                                                                            style={{color: '#888'}}>需{item.count}</span>
+                                                                        <span style={{
+                                                                            margin: '0 4px',
+                                                                            color: '#eee'
+                                                                        }}>|</span>
+                                                                        <span style={{
+                                                                            color: isEnough ? '#2e7d32' : '#e65100',
+                                                                            fontWeight: 'bold'
+                                                                        }}>
+                                                                            存{stock}
+                                                                        </span>
+                                                                    </div>
                                                                 </div>
-                                                            </div>
-                                                        )
-                                                    })}
+                                                            )
+                                                        })}
+                                                    </div>
                                                 </div>
-                                            </div>
+                                            )
                                         }
                                     >
                                         <span
                                             style={{
                                                 cursor: 'pointer',
                                                 textDecoration: 'underline',
-                                                color: isReady ? '#2e7d32' : '#1565c0',
-                                                fontWeight: isReady ? 'bold' : 'normal',
+                                                color: isVirtual ? '#8e24aa' : (isReady ? '#2e7d32' : '#1565c0'),
+                                                fontWeight: isReady || isVirtual ? 'bold' : 'normal',
                                                 padding: '2px 6px',
                                                 borderRadius: 4,
                                                 background: activePopoverId === popoverKey
-                                                    ? (isReady ? '#e8f5e9' : '#e3f2fd')
+                                                    ? (isVirtual ? '#f3e5f5' : (isReady ? '#e8f5e9' : '#e3f2fd'))
                                                     : 'transparent',
                                                 transition: 'background 0.2s',
                                                 display: 'flex', alignItems: 'center', gap: 3
@@ -346,7 +408,6 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                         )}
                     </div>
 
-                    {/* NEW: 道具需求汇总 (分开展示) */}
                     {(Object.keys(coreTools).length > 0 || Object.keys(passengerTools).length > 0) && (
                         <div style={{
                             display: 'flex',
@@ -355,7 +416,6 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                             marginBottom: 15,
                             paddingLeft: 4
                         }}>
-
                             {/* 核心目标道具 */}
                             {Object.keys(coreTools).length > 0 && (
                                 <div style={{display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap'}}>
@@ -398,6 +458,17 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                         display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 15, fontSize: 13,
                         background: '#fafafa', padding: 12, borderRadius: 8, border: '1px solid #f0f0f0'
                     }}>
+                        {/* 功能点 2: 警告 */}
+                        {showTimeWarning && (
+                            <div style={{
+                                color: '#e65100', background: '#fff3e0', border: '1px solid #ffe0b2',
+                                padding: '6px 10px', borderRadius: 6, fontSize: 12, fontWeight: 'bold',
+                                marginBottom: 8
+                            }}>
+                                ⚠️ 核心目标幼菌生长时间更长，请务必注意区分，避免收获错误品种！
+                            </div>
+                        )}
+
                         {diseaseGroups['healthy'].length > 0 && (
                             <div style={{display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap'}}>
                                 <span style={{fontWeight: 'bold', color: '#2e7d32', width: 60}}>💚 健康:</span>
@@ -523,6 +594,8 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                         {batch.tasks.sort((a, b) => (a.isPassenger === b.isPassenger ? 0 : a.isPassenger ? 1 : -1)).map((task, tIdx) => {
                             const isPassenger = !!task.isPassenger;
                             const currentStock = inventory[task.mushroom.id] || 0;
+                            // 检查是否未收集
+                            const isUncollected = !collectedIds.includes(task.mushroom.id);
 
                             return (
                                 <div key={tIdx} style={{
@@ -558,6 +631,14 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                     color: '#666',
                                                     border: '1px solid #ddd'
                                                 }}>蹭</span>}
+                                                {isUncollected && <span style={{
+                                                    fontSize: 10,
+                                                    color: '#e65100',
+                                                    background: '#fff3e0',
+                                                    border: '1px solid #ffcc80',
+                                                    borderRadius: 4,
+                                                    padding: '0 4px'
+                                                }}>新</span>}
                                             </div>
                                             <div style={{fontSize: 12, color: '#666', marginTop: 2}}>
                                                 需: <span
@@ -577,6 +658,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                             color: '#2e7d32', fontWeight: 'bold', padding: '6px 10px',
                                             height: 'fit-content'
                                         }}
+                                        title={isUncollected ? "增加库存并询问是否标记为已收集" : "增加库存"}
                                     >
                                         +1
                                     </button>
@@ -607,8 +689,20 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                 justifyContent: 'space-between',
                 alignItems: 'center'
             }}>
-                <div><h2 style={{margin: 0, color: '#333'}}>🌱 培育计划</h2></div>
-                <button onClick={onRefresh} style={{...btnStyle, background: '#f5f5f5', color: '#333'}}>🔄 刷新</button>
+                <div style={{display: 'flex', alignItems: 'center', gap: 15}}>
+                    <h2 style={{margin: 0, color: '#333'}}>🌱 培育计划</h2>
+                    {/* 功能点 1: 醒目警告 */}
+                    <span style={{
+                        fontSize: 12,
+                        color: '#c62828',
+                        background: '#ffebee',
+                        padding: '4px 8px',
+                        borderRadius: 4,
+                        border: '1px solid #ef9a9a'
+                    }}>
+                        ⚠️ 种完核心菌种请立刻撤下设备，否则可能浪费灯油和水！
+                    </span>
+                </div>
             </div>
             <div style={{padding: 20}}>
                 {filteredMissingSummary.length > 0 && (
@@ -782,7 +876,12 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                         {orders.filter(o => o.active).length === 0 ? (
                             <div style={{padding: 8, color: '#999', fontSize: 12}}>暂无进行中订单</div>
                         ) : (
-                            orders.filter(o => o.active).map(order => (
+                            orders.filter(o => o.active).sort((a, b) => {
+                                // 功能点 8: 图鉴订单置顶
+                                if (a.id === VIRTUAL_ORDER_ID) return -1;
+                                if (b.id === VIRTUAL_ORDER_ID) return 1;
+                                return 0;
+                            }).map(order => (
                                 <label
                                     key={order.id}
                                     style={{
@@ -811,7 +910,9 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                         flex: 1,
                                         overflow: 'hidden',
                                         textOverflow: 'ellipsis',
-                                        whiteSpace: 'nowrap'
+                                        whiteSpace: 'nowrap',
+                                        color: order.id === VIRTUAL_ORDER_ID ? '#6a1b9a' : 'inherit',
+                                        fontWeight: order.id === VIRTUAL_ORDER_ID ? 'bold' : 'normal'
                                     }}>
                                         {order.name}
                                     </span>

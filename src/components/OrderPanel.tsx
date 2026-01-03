@@ -1,5 +1,5 @@
 // src/components/OrderPanel.tsx
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react'; // 引入 useCallback
 import { MUSHROOM_DB } from '../database';
 import { getMushroomImg } from '../utils';
 import { CollapsibleSection, MiniImg, MushroomSelector } from './Common';
@@ -7,6 +7,8 @@ import type { HumidifierType, LightType, Order, WoodType } from '../types';
 
 interface OrderPanelProps {
     orders: Order[];
+    virtualOrder: Order | null;
+    onToggleVirtualOrder: (active: boolean) => void;
     newOrderName: string;
     onNewOrderNameChange: (val: string) => void;
     onAddOrder: () => void;
@@ -24,8 +26,60 @@ interface OrderPanelProps {
     inventory: Record<string, number>;
 }
 
+// 修改点 3: 将 StatusBadge 移出组件外部 (静态组件)
+const StatusBadge: React.FC<{ active: boolean; equipReady: boolean; stockReady: boolean }> = ({
+                                                                                                  active,
+                                                                                                  equipReady,
+                                                                                                  stockReady
+                                                                                              }) => {
+    if (!active) {
+        return (
+            <span style={{
+                fontSize: 11, background: '#f5f5f5', color: '#999',
+                padding: '2px 6px', borderRadius: 4, border: '1px solid #ddd',
+                display: 'flex', alignItems: 'center', gap: 4
+            }}>
+                ⏸️ 已暂停
+            </span>
+        );
+    }
+    if (stockReady) {
+        return (
+            <span style={{
+                fontSize: 11, background: '#e8f5e9', color: '#2e7d32',
+                padding: '2px 6px', borderRadius: 4, border: '1px solid #a5d6a7',
+                fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 4
+            }}>
+                ✅ 可完成
+            </span>
+        );
+    }
+    if (equipReady) {
+        return (
+            <span style={{
+                fontSize: 11, background: '#e3f2fd', color: '#1565c0',
+                padding: '2px 6px', borderRadius: 4, border: '1px solid #90caf9',
+                fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 4
+            }}>
+                🚀 可开始
+            </span>
+        );
+    }
+    return (
+        <span style={{
+            fontSize: 11, background: '#fff3e0', color: '#ef6c00',
+            padding: '2px 6px', borderRadius: 4, border: '1px solid #ffe0b2',
+            fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 4
+        }}>
+            ⚠️ 缺道具
+        </span>
+    );
+};
+
 export const OrderPanel: React.FC<OrderPanelProps> = ({
                                                           orders,
+                                                          virtualOrder,
+                                                          onToggleVirtualOrder,
                                                           newOrderName,
                                                           onNewOrderNameChange,
                                                           onAddOrder,
@@ -43,7 +97,8 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                                                           inventory
                                                       }) => {
 
-    const isOrderReady = (order: Order) => {
+    // 修改点 2: 使用 useCallback 包裹辅助函数，使其在依赖不变时保持引用稳定
+    const isOrderReady = useCallback((order: Order) => {
         if (order.items.length === 0) return true;
         return order.items.every(item => {
             const m = MUSHROOM_DB.find(def => def.id === item.mushroomId);
@@ -53,17 +108,17 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
             const humidifierReady = !m.humidifier || unlockedHumidifiers.includes(m.humidifier);
             return woodReady && lightReady && humidifierReady;
         });
-    };
+    }, [unlockedWoods, unlockedLights, unlockedHumidifiers]);
 
-    const checkEquipmentReady = (order: Order) => isOrderReady(order);
+    const checkEquipmentReady = useCallback((order: Order) => isOrderReady(order), [isOrderReady]);
 
-    const checkStockReady = (order: Order) => {
+    const checkStockReady = useCallback((order: Order) => {
         if (order.items.length === 0) return false;
         return order.items.every(item => {
             const current = inventory[item.mushroomId] || 0;
             return current >= item.count;
         });
-    };
+    }, [inventory]);
 
     const sortedOrders = useMemo(() => {
         const withIndex = orders.map((order, index) => ({order, index}));
@@ -79,6 +134,7 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
             if (orderA.active !== orderB.active) return orderA.active ? -1 : 1;
 
             if (orderA.active) {
+                // 现在可以在 useMemo 内部安全调用这些稳定的 callback
                 const stockA = checkStockReady(orderA);
                 const stockB = checkStockReady(orderB);
                 if (stockA !== stockB) return stockA ? -1 : 1;
@@ -90,56 +146,7 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
 
             return a.index - b.index;
         }).map(item => item.order);
-    }, [orders, editingOrderIds, unlockedWoods, unlockedLights, unlockedHumidifiers, inventory]);
-
-    const StatusBadge: React.FC<{ active: boolean; equipReady: boolean; stockReady: boolean }> = ({
-                                                                                                      active,
-                                                                                                      equipReady,
-                                                                                                      stockReady
-                                                                                                  }) => {
-        if (!active) {
-            return (
-                <span style={{
-                    fontSize: 11, background: '#f5f5f5', color: '#999',
-                    padding: '2px 6px', borderRadius: 4, border: '1px solid #ddd',
-                    display: 'flex', alignItems: 'center', gap: 4
-                }}>
-                    ⏸️ 已暂停
-                </span>
-            );
-        }
-        if (stockReady) {
-            return (
-                <span style={{
-                    fontSize: 11, background: '#e8f5e9', color: '#2e7d32',
-                    padding: '2px 6px', borderRadius: 4, border: '1px solid #a5d6a7',
-                    fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 4
-                }}>
-                    ✅ 可完成
-                </span>
-            );
-        }
-        if (equipReady) {
-            return (
-                <span style={{
-                    fontSize: 11, background: '#e3f2fd', color: '#1565c0',
-                    padding: '2px 6px', borderRadius: 4, border: '1px solid #90caf9',
-                    fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 4
-                }}>
-                    🚀 可开始
-                </span>
-            );
-        }
-        return (
-            <span style={{
-                fontSize: 11, background: '#fff3e0', color: '#ef6c00',
-                padding: '2px 6px', borderRadius: 4, border: '1px solid #ffe0b2',
-                fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 4
-            }}>
-                ⚠️ 缺道具
-            </span>
-        );
-    };
+    }, [orders, editingOrderIds, checkStockReady, checkEquipmentReady]); // 依赖项改为稳定的 callback
 
     return (
         <CollapsibleSection
@@ -152,7 +159,7 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                         padding: '1px 8px', borderRadius: 10,
                         color: '#1565c0', border: '1px solid rgba(21, 101, 192, 0.2)'
                     }}>
-                        {orders.length}
+                        {orders.length + (virtualOrder ? 1 : 0)}
                     </span>
                 </div>
             }
@@ -186,7 +193,68 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
             </div>
 
             <div style={{display: 'flex', flexDirection: 'column', gap: 10}}>
-                {sortedOrders.length === 0 &&
+                {/* 虚拟图鉴订单 */}
+                {virtualOrder && (
+                    <div style={{
+                        border: virtualOrder.active ? '1px solid #ba68c8' : '1px dashed #ccc',
+                        borderRadius: 8,
+                        padding: 12,
+                        background: virtualOrder.active ? '#f3e5f5' : '#fafafa',
+                        opacity: virtualOrder.active ? 1 : 0.75,
+                        transition: 'all 0.2s',
+                    }}>
+                        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                            <div style={{display: 'flex', alignItems: 'center', gap: 8, flex: 1}}>
+                                <span style={{
+                                    fontWeight: 'bold',
+                                    fontSize: 15,
+                                    color: virtualOrder.active ? '#6a1b9a' : '#999'
+                                }}>
+                                    {virtualOrder.name}
+                                </span>
+                                {virtualOrder.active ? (
+                                    <span style={{
+                                        fontSize: 11, background: '#f3e5f5', color: '#8e24aa',
+                                        padding: '2px 6px', borderRadius: 4, border: '1px solid #e1bee7',
+                                        fontWeight: 'bold'
+                                    }}>自动</span>
+                                ) : (
+                                    <StatusBadge active={false} equipReady={true} stockReady={false}/>
+                                )}
+                            </div>
+                            <button
+                                onClick={() => onToggleVirtualOrder(!virtualOrder.active)}
+                                title={virtualOrder.active ? "暂停图鉴收集" : "恢复图鉴收集"}
+                                style={{
+                                    fontSize: 16, width: 34, height: 34, cursor: 'pointer',
+                                    background: '#fff', border: '1px solid #ddd', borderRadius: 6,
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                }}
+                            >
+                                {virtualOrder.active ? '⏸️' : '▶️'}
+                            </button>
+                        </div>
+                        {virtualOrder.active && (
+                            <div style={{marginTop: 8, fontSize: 13, color: '#6a1b9a'}}>
+                                📊 收集进度：
+                                {(() => {
+                                    // items 里都是未收集的
+                                    const totalUncollected = virtualOrder.items.length;
+                                    const inStockButUncollected = virtualOrder.items.filter(i => (inventory[i.mushroomId] || 0) > 0).length;
+                                    const completelyMissing = totalUncollected - inStockButUncollected;
+
+                                    return (
+                                        <span style={{fontWeight: 'bold'}}>
+                                            未收集：{completelyMissing}，有库存但未收集：{inStockButUncollected}
+                                        </span>
+                                    );
+                                })()}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {sortedOrders.length === 0 && !virtualOrder &&
                     <div style={{color: '#999', textAlign: 'center', padding: 20}}>暂无订单</div>}
 
                 {sortedOrders.map(order => {
@@ -292,22 +360,19 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                                                 }}>
                                                     <MiniImg src={getMushroomImg(m.id)} size={24} circle/>
                                                     <span style={{fontSize: 13}}>{m.name}</span>
-                                                    {/* --- 调整后的输入框 --- */}
                                                     <input
                                                         type="number"
                                                         min={0}
-                                                        // 值为0时显示空字符串，方便清空
                                                         value={item.count === 0 ? '' : item.count}
                                                         onChange={e => {
                                                             const val = e.target.value;
-                                                            // 空字符串处理为 0
                                                             const num = val === '' ? 0 : parseInt(val);
                                                             if (!isNaN(num) && num >= 0) {
                                                                 onUpdateItemCount(order.id, m.id, num);
                                                             }
                                                         }}
                                                         style={{
-                                                            width: 50, // 宽度增加到 50px
+                                                            width: 50,
                                                             padding: 2,
                                                             textAlign: 'center',
                                                             border: 'none',

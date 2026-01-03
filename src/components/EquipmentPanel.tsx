@@ -2,7 +2,8 @@ import React from 'react';
 import { HUMIDIFIER_INFO, LIGHT_INFO, WOOD_INFO } from '../database';
 import type { HumidifierType, LightType, WoodType } from '../types';
 import { Humidifiers, Lights, Woods } from '../types';
-import { CollapsibleSection, labelStyle, tagContainerStyle, ToggleTag } from './Common';
+import { CollapsibleSection, ToggleTag } from './Common';
+import { labelStyle, tagContainerStyle } from '../styles';
 
 interface EquipmentPanelProps {
     unlockedWoods: WoodType[];

@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Profile } from '../types';
-import { btnStyle } from './Common';
+import { btnStyle } from '../styles';
 
 interface HeaderProps {
     onExport: () => void;

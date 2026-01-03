@@ -30,21 +30,30 @@ const getSpecialStyle = (special: string) => {
     }
 };
 
-// --- 子组件：单个菌种卡片 ---
 const MushroomCardItem: React.FC<{
     m: MushroomDef;
     isCollected: boolean;
+    hasStock: boolean;
     onToggle: (id: string) => void;
     unlockedWoods: WoodType[];
     unlockedLights: LightType[];
     unlockedHumidifiers: HumidifierType[];
-}> = ({m, isCollected, onToggle}) => {
+}> = ({m, isCollected, hasStock, onToggle}) => {
+    // 动态样式：如果有库存且未收集，给一个特殊的边框和背景
+    const borderStyle = isCollected
+        ? '2px solid #81c784'
+        : (hasStock ? '2px solid #ef5350' : '2px dashed #ffb74d'); // 红色实线强调
+
+    const bgStyle = isCollected
+        ? '#fff'
+        : (hasStock ? '#ffebee' : '#fff8e1'); // 红色背景强调
+
     return (
         <div
             style={{
-                border: isCollected ? '2px solid #81c784' : '2px dashed #ffb74d',
+                border: borderStyle,
                 borderRadius: 8, padding: 15,
-                background: isCollected ? '#fff' : '#fff8e1',
+                background: bgStyle,
                 boxShadow: isCollected ? '0 2px 8px rgba(76, 175, 80, 0.2)' : '0 2px 5px rgba(0,0,0,0.05)',
                 display: 'flex', flexDirection: 'column', gap: 10,
                 cursor: 'default',
@@ -52,7 +61,6 @@ const MushroomCardItem: React.FC<{
                 opacity: 1
             }}
         >
-            {/* 点击图标切换收集状态 (防误触优化) */}
             <div
                 onClick={(e) => {
                     e.stopPropagation();
@@ -77,12 +85,28 @@ const MushroomCardItem: React.FC<{
                         color: isCollected ? '#333' : '#e65100'
                     }}>{m.name}</div>
                     <div style={{fontSize: 12, color: '#999', marginTop: 4}}>ID: {m.id}</div>
-                    {!isCollected &&
-                        <div style={{fontSize: 11, color: '#e65100', marginTop: 2, fontWeight: 'bold'}}>未收集</div>}
+                    {!isCollected && (
+                        <div style={{marginTop: 4}}>
+                            <span style={{fontSize: 11, color: '#e65100', fontWeight: 'bold'}}>未收集</span>
+                            {/* 修改点 4: 标出来 */}
+                            {hasStock && (
+                                <span style={{
+                                    marginLeft: 6,
+                                    fontSize: 10,
+                                    background: '#d32f2f',
+                                    color: '#fff',
+                                    padding: '2px 5px',
+                                    borderRadius: 4,
+                                    fontWeight: 'bold'
+                                }}>有库存</span>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
             <hr style={{border: 0, borderTop: isCollected ? '1px dashed #eee' : '1px dashed #ffcc80', margin: 0}}/>
             <div style={{fontSize: 12, display: 'flex', flexDirection: 'column', gap: 5}}>
+                {/* ... existing environment info render ... */}
                 <div style={{display: 'flex', alignItems: 'center', gap: 6}}>
                     <span style={{color: '#888'}}>起始:</span>
                     <MiniImg src={getChildImg(m.starter, m.special)} label={m.starter} size={20} circle/>
@@ -152,6 +176,8 @@ interface EncyclopediaProps {
     unlockedWoods: WoodType[];
     unlockedLights: LightType[];
     unlockedHumidifiers: HumidifierType[];
+    inventory: Record<string, number>; // 新增
+    recentIds: string[]; // 新增，替代内部 state
 }
 
 export const Encyclopedia: React.FC<EncyclopediaProps> = ({
@@ -160,34 +186,22 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
                                                               onBatchCollect,
                                                               unlockedWoods,
                                                               unlockedLights,
-                                                              unlockedHumidifiers
+                                                              unlockedHumidifiers,
+                                                              inventory,
+                                                              recentIds
                                                           }) => {
     // Refs for scrolling
     const topRef = useRef<HTMLDivElement>(null);
     const collectedStartRef = useRef<HTMLDivElement>(null);
 
-    // --- 1. 新增：最近操作记录状态 (Session Only) ---
-    const [recentIds, setRecentIds] = useState<string[]>([]);
+    // 移除内部 recentIds state，改用 props
 
-    const addToRecent = (ids: string | string[]) => {
-        setRecentIds(prev => {
-            const newItems = Array.isArray(ids) ? ids : [ids];
-            // 过滤掉已存在的，然后插到最前面
-            const filteredPrev = prev.filter(pid => !newItems.includes(pid));
-            return [...newItems, ...filteredPrev].slice(0, 10); // 只保留最近10个
-        });
-    };
-
-    // 包装 toggle 函数
     const handleToggle = (id: string) => {
         onToggleCollection(id);
-        addToRecent(id);
     };
 
-    // 包装 batch 函数
     const handleBatch = (ids: string[]) => {
         onBatchCollect(ids);
-        addToRecent(ids);
     };
 
     const [filters, setFilters] = useState({
@@ -210,9 +224,9 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
                 const lower = searchTerm.toLowerCase().trim();
                 if (!m.name.includes(lower) && !m.pinyin.includes(lower)) return false;
             }
-            // ... (Filters copied from previous) ...
             if (filters.starter !== 'all' && m.starter !== filters.starter) return false;
             if (filters.wood !== 'all' && m.wood !== filters.wood) return false;
+            // ... (其他筛选逻辑不变) ...
             if (filters.light !== 'all' && m.light !== filters.light) return false;
             if (filters.humidifier !== 'all' && m.humidifier !== filters.humidifier) return false;
             if (filters.time !== 'all' && m.time !== filters.time) return false;
@@ -234,22 +248,33 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
         });
     }, [filters, searchTerm, collectedIds, checkToolsReady]);
 
-    // --- 排序逻辑 ---
+    // --- 修改点 4: 排序逻辑优化 (有库存未收集置顶) ---
     const sortedDisplayList = useMemo(() => {
         return [...filteredList].sort((a, b) => {
             const isACollected = collectedIds.includes(a.id);
             const isBCollected = collectedIds.includes(b.id);
+
+            // 1. 已收集的沉底
             if (isACollected !== isBCollected) return isACollected ? 1 : -1;
+
+            // 2. 如果都未收集，检查是否有库存
             if (!isACollected) {
+                const stockA = (inventory[a.id] || 0) > 0;
+                const stockB = (inventory[b.id] || 0) > 0;
+                // 有库存的优先
+                if (stockA !== stockB) return stockA ? -1 : 1;
+
+                // 3. 然后按严格度
                 const scoreA = getStrictnessScore(a);
                 const scoreB = getStrictnessScore(b);
                 if (scoreA !== scoreB) return scoreB - scoreA;
             }
+
             return MUSHROOM_DB.indexOf(a) - MUSHROOM_DB.indexOf(b);
         });
-    }, [filteredList, collectedIds]);
+    }, [filteredList, collectedIds, inventory]);
 
-    // --- 缺失环境计算 ---
+    // ... (missingEnvironments logic unchanged) ...
     const missingEnvironments = useMemo(() => {
         const uncollectedItems = filteredList.filter(m => !collectedIds.includes(m.id));
         const envMap = new Map<string, {
@@ -286,7 +311,6 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
         }
     };
 
-    // --- 准备最近操作数据 ---
     const recentMushrooms = useMemo(() => {
         return recentIds.map(id => MUSHROOM_DB.find(m => m.id === id)).filter((m): m is MushroomDef => !!m);
     }, [recentIds]);
@@ -294,12 +318,10 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
     const hasCollectedInView = sortedDisplayList.some(m => collectedIds.includes(m.id));
     const selectStyle = {padding: '6px', borderRadius: 4, border: '1px solid #ccc', fontSize: 13, minWidth: 100};
 
-    // 全局统计
     const totalCollected = collectedIds.length;
     const totalMushrooms = MUSHROOM_DB.length;
     const progressPercent = Math.round((totalCollected / totalMushrooms) * 100);
 
-    // --- 新增：当前筛选列表的统计 ---
     const currentListTotal = filteredList.length;
     const currentListCollected = filteredList.filter(m => collectedIds.includes(m.id)).length;
     const currentListUncollected = currentListTotal - currentListCollected;
@@ -309,7 +331,7 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
 
     return (
         <div ref={topRef} style={{paddingBottom: 80, position: 'relative'}}>
-            {/* 顶部：筛选器 */}
+            {/* 顶部：筛选器 (部分代码省略，保持原样) */}
             <CollapsibleSection
                 title="🔍 图鉴筛选"
                 defaultOpen={true}
@@ -317,7 +339,7 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
                 headerColor="#1565c0"
                 action={
                     <div style={{display: 'flex', gap: 8, alignItems: 'center'}}>
-                        {/* 新增：当前筛选状态统计 */}
+                        {/* ... stats ... */}
                         <div style={{
                             display: 'flex', alignItems: 'center', gap: 6,
                             background: '#fff', padding: '2px 8px', borderRadius: 10,
@@ -328,8 +350,6 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
                             <span style={{color: '#2e7d32'}} title="已收集">✅ {currentListCollected}</span>
                             <span style={{color: '#e65100'}} title="未收集">❌ {currentListUncollected}</span>
                         </div>
-
-                        {/* 全局进度 */}
                         <div style={{
                             display: 'flex', alignItems: 'center', gap: 4,
                             background: '#e8f5e9', padding: '2px 8px', borderRadius: 10,
@@ -362,6 +382,7 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
                             }}
                         />
                     </div>
+                    {/* ... Select inputs kept same ... */}
                     <div style={{display: 'flex', flexWrap: 'wrap', gap: 15}}>
                         <label>
                             <div style={{fontSize: 12, color: '#888', marginBottom: 4}}>收集状态</div>
@@ -374,6 +395,7 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
                                 <option value="uncollected">❌ 未收集</option>
                             </select>
                         </label>
+                        {/* ... other filters ... */}
                         <label>
                             <div style={{fontSize: 12, color: '#888', marginBottom: 4}}>初始菌种</div>
                             <select style={selectStyle} value={filters.starter}
@@ -383,7 +405,6 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
                                                                                    value={id}>{MUSHROOM_CHILDREN[id]}</option>)}
                             </select>
                         </label>
-                        {/* 简略其他筛选器，保持界面整洁 */}
                         <label>
                             <div style={{fontSize: 12, color: '#888', marginBottom: 4}}>木头</div>
                             <select style={selectStyle} value={filters.wood}
@@ -430,7 +451,7 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
                 </div>
             </CollapsibleSection>
 
-            {/* --- 2. 新增：最近操作列表 (Display at Front) --- */}
+            {/* 最近操作列表 (使用 props 中的 recentIds) */}
             {recentMushrooms.length > 0 && (
                 <CollapsibleSection
                     title={
@@ -439,7 +460,7 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
                                 fontSize: 12,
                                 fontWeight: 'normal',
                                 color: '#0277bd'
-                            }}>(操作记录刷新后会丢失，激活情况不会)</span></span>
+                            }}>(本次会话记录)</span></span>
                     }
                     defaultOpen={false}
                     headerBg="#e1f5fe"
@@ -455,6 +476,7 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
                                 key={`recent-${m.id}`}
                                 m={m}
                                 isCollected={collectedIds.includes(m.id)}
+                                hasStock={(inventory[m.id] || 0) > 0}
                                 onToggle={handleToggle}
                                 unlockedWoods={unlockedWoods}
                                 unlockedLights={unlockedLights}
@@ -465,7 +487,7 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
                 </CollapsibleSection>
             )}
 
-            {/* 中间：环境需求汇总 */}
+            {/* 中间：环境需求汇总 (保持不变) */}
             {missingEnvironments.length > 0 && (
                 <CollapsibleSection
                     title={<span>🧪 待收集环境配方 <span style={{
@@ -475,6 +497,7 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
                     }}>({missingEnvironments.length} 组)</span></span>}
                     defaultOpen={false} headerBg="#fff3e0" headerColor="#e65100"
                 >
+                    {/* ... content kept same ... */}
                     <div style={{display: 'flex', flexDirection: 'column', gap: 8}}>
                         <div style={{fontSize: 12, color: '#888', marginBottom: 4}}>以下是当前筛选范围内，未收集菌种所需的环境组合。<br/>排序优先级：<b>道具齐全</b> &gt;
                             <b>严格度高</b></div>
@@ -524,7 +547,7 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
                 </CollapsibleSection>
             )}
 
-            {/* 新增：批量收集按钮 */}
+            {/* 新增：批量收集按钮 (保持不变) */}
             {uncollectedIdsInView.length > 0 && (
                 <div style={{marginTop: 15, marginBottom: 5, display: 'flex', justifyContent: 'flex-end'}}>
                     <button onClick={handleBatchClick} style={{
@@ -579,6 +602,7 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
                             <MushroomCardItem
                                 m={m}
                                 isCollected={isCollected}
+                                hasStock={(inventory[m.id] || 0) > 0}
                                 onToggle={handleToggle}
                                 unlockedWoods={unlockedWoods}
                                 unlockedLights={unlockedLights}
@@ -595,7 +619,7 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
                 }}>没有符合条件的菌种</div>}
             </div>
 
-            {/* 悬浮球 */}
+            {/* 悬浮球 (保持不变) */}
             <div style={{
                 position: 'fixed',
                 bottom: 30,
