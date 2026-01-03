@@ -24,8 +24,18 @@ interface PlanPanelProps {
     inventory: Record<string, number>;
     onAddOne: (id: string) => void;
     collectedIds: string[];
-    // 新增：外部联动属性
     filterIntent?: FilterIntent | null;
+    filters: {
+        wood: string;
+        status: string;
+        orderIds: string[];
+    };
+    onUpdateFilters: React.Dispatch<React.SetStateAction<{
+        wood: string;
+        status: string;
+        orderIds: string[];
+    }>>;
+    onConsumeFilterIntent: () => void;
 }
 
 export const PlanPanel: React.FC<PlanPanelProps> = ({
@@ -34,7 +44,10 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                         inventory,
                                                         onAddOne,
                                                         collectedIds,
-                                                        filterIntent
+                                                        filterIntent,
+                                                        filters,
+                                                        onUpdateFilters,
+                                                        onConsumeFilterIntent
                                                     }) => {
     const [activePopoverId, setActivePopoverId] = useState<string | null>(null);
     const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -52,12 +65,6 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
             setIsNavOpen(false); // 跳转后自动关闭菜单
         }
     };
-
-    const [filters, setFilters] = useState({
-        wood: 'all',
-        status: 'all',
-        orderIds: [] as string[]
-    });
 
     // 计算订单分组，用于响应 FilterIntent
     const orderGroups = useMemo(() => {
@@ -90,19 +97,22 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
     }, [orderGroups]);
 
     // 核心修改：监听外部筛选意图
+    // 3. 修改监听 FilterIntent 的 Effect
     useEffect(() => {
         if (!filterIntent) return;
 
         if (filterIntent.type === 'all') {
-            setFilters(prev => ({...prev, orderIds: []}));
+            onUpdateFilters(prev => ({...prev, orderIds: []}));
         } else if (filterIntent.type === 'group' && filterIntent.value) {
             const groupName = filterIntent.value;
             const targetOrders = orderGroupsRef.current[groupName] || [];
             const targetIds = targetOrders.map(o => o.id);
-            setFilters(prev => ({...prev, orderIds: targetIds}));
+            onUpdateFilters(prev => ({...prev, orderIds: targetIds}));
         }
-        // 修改依赖项：拆解对象，只监听属性值。
-        // 这样即使 filterIntent 对象引用变化，只要 type 和 value 没变，就不会触发更新
+
+        // 关键：消费掉 intent，防止切页面回来后重复触发（导致覆盖用户的手动修改）
+        onConsumeFilterIntent();
+
     }, [filterIntent?.type, filterIntent?.value]);
 
     const checkOrderStockReady = (order: Order) => {
@@ -972,12 +982,12 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                             const toggleGroup = () => {
                                 const groupIds = groupOrders.map(o => o.id);
                                 if (isGroupAllSelected) {
-                                    setFilters(prev => ({
+                                    onUpdateFilters(prev => ({
                                         ...prev,
                                         orderIds: prev.orderIds.filter(id => !groupIds.includes(id))
                                     }));
                                 } else {
-                                    setFilters(prev => ({
+                                    onUpdateFilters(prev => ({
                                         ...prev,
                                         orderIds: Array.from(new Set([...prev.orderIds, ...groupIds]))
                                     }));
@@ -1021,7 +1031,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                         checked={filters.orderIds.includes(order.id)}
                                                         onChange={e => {
                                                             const checked = e.target.checked;
-                                                            setFilters(prev => ({
+                                                            onUpdateFilters(prev => ({
                                                                 ...prev,
                                                                 orderIds: checked ? [...prev.orderIds, order.id] : prev.orderIds.filter(id => id !== order.id)
                                                             }));
@@ -1044,7 +1054,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                             <div style={{padding: 8, color: '#999', fontSize: 12}}>暂无订单</div>}
                     </div>
                     <div style={{display: 'flex', justifyContent: 'flex-end', marginTop: 4, gap: 8}}>
-                        <span onClick={() => setFilters(prev => ({
+                        <span onClick={() => onUpdateFilters(prev => ({
                             ...prev,
                             orderIds: orders.filter(o => o.active).map(o => o.id)
                         }))} style={{
@@ -1053,7 +1063,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                             cursor: 'pointer',
                             textDecoration: 'underline'
                         }}>全选</span>
-                        <span onClick={() => setFilters(prev => ({...prev, orderIds: []}))} style={{
+                        <span onClick={() => onUpdateFilters(prev => ({...prev, orderIds: []}))} style={{
                             fontSize: 11,
                             color: '#999',
                             cursor: 'pointer',
@@ -1064,7 +1074,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
 
                 <div>
                     <div style={{fontSize: 13, color: '#666', marginBottom: 6, fontWeight: '500'}}>🪵 木头类型</div>
-                    <select value={filters.wood} onChange={e => setFilters({...filters, wood: e.target.value})}
+                    <select value={filters.wood} onChange={e => onUpdateFilters({...filters, wood: e.target.value})}
                             style={{width: '100%', padding: '6px', borderRadius: 4, border: '1px solid #ddd'}}>
                         <option value="all">全部</option>
                         {Object.values(Woods).map(w => <option key={w} value={w}>{w}</option>)}
@@ -1072,7 +1082,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                 </div>
                 <div>
                     <div style={{fontSize: 13, color: '#666', marginBottom: 6, fontWeight: '500'}}>🚦 道具状态</div>
-                    <select value={filters.status} onChange={e => setFilters({...filters, status: e.target.value})}
+                    <select value={filters.status} onChange={e => onUpdateFilters({...filters, status: e.target.value})}
                             style={{width: '100%', padding: '6px', borderRadius: 4, border: '1px solid #ddd'}}>
                         <option value="all">全部</option>
                         <option value="ready">✅ 道具齐全</option>

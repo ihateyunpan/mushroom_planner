@@ -117,10 +117,15 @@ function App() {
         }
     });
 
-    // 新增：用于 OrderPanel 和 PlanPanel 联动的状态 (升级为 FilterIntent)
     const [filterIntent, setFilterIntent] = useState<FilterIntent | null>(null);
 
-    // 修改：addToRecent 直接更新 globalData，实现持久化
+    // 1. 新增：将 PlanPanel 的筛选状态提升到 App 中管理，以便切换 Tab 后保留
+    const [planFilters, setPlanFilters] = useState({
+        wood: 'all',
+        status: 'all',
+        orderIds: [] as string[]
+    });
+
     const addToRecent = (ids: string | string[]) => {
         setGlobalData(prev => {
             const currentRecents = prev.recentIds || [];
@@ -623,8 +628,8 @@ function App() {
                         </div>
                     </div>
 
-                    {/* 修改：传入联动状态 */}
                     <div id="panel-plan">
+                        {/* 2. 修改：传递 filters 状态和相关回调给 PlanPanel */}
                         <PlanPanel
                             plan={calculationResult}
                             onCompleteTask={handleCompleteTask}
@@ -641,7 +646,12 @@ function App() {
                                 handleAddOne(id);
                             }}
                             collectedIds={data.collectedMushrooms || []}
+
+                            // 新增以下三个 props:
                             filterIntent={filterIntent}
+                            filters={planFilters}
+                            onUpdateFilters={setPlanFilters}
+                            onConsumeFilterIntent={() => setFilterIntent(null)}
                         />
                     </div>
                 </div>
