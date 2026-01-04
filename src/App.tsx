@@ -2,7 +2,18 @@
 import React, { Suspense, useEffect, useMemo, useState } from 'react';
 import { MUSHROOM_DB } from './database';
 import { calculateOptimalRoute, type PlanTask } from './logic';
-import type { FilterIntent, GlobalStorage, MushroomDef, Order, UserSaveData } from './types';
+import type {
+    ActionRecord,
+    FilterIntent,
+    GlobalStorage,
+    HumidifierType,
+    ImportRecord,
+    LightType,
+    MushroomDef,
+    Order,
+    UserSaveData,
+    WoodType
+} from './types';
 import { Humidifiers, Lights, VIRTUAL_ORDER_ID, Woods } from './types';
 import './App.css';
 
@@ -19,6 +30,7 @@ const Encyclopedia = React.lazy(() =>
     import('./components/Encyclopedia').then(module => ({default: module.Encyclopedia}))
 );
 
+// 1. 修改 SAFE_INITIAL_DATA，明确添加历史记录字段
 const SAFE_INITIAL_DATA: UserSaveData = {
     orders: [],
     inventory: {},
@@ -26,13 +38,16 @@ const SAFE_INITIAL_DATA: UserSaveData = {
     unlockedLights: Object.values(Lights).slice(0, 1),
     unlockedHumidifiers: Object.values(Humidifiers).slice(0, 1),
     collectedMushrooms: [],
-    growing: {}, // <--- 核心修复：在这里添加默认值，所有版本（包括V1）和新存档就都自动兼容了
+    growing: {},
+    actionHistory: [], // V5 新增：操作历史
+    importHistory: []  // V5 新增：导入历史
 };
 
 const OLD_STORAGE_KEY = 'MUSHROOM_HELPER_DATA_V1';
-const V2_STORAGE_KEY = 'MUSHROOM_HELPER_GLOBAL_V2'; // 旧版本 Key，用于兼容读取
-const V3_STORAGE_KEY = 'MUSHROOM_HELPER_GLOBAL_V3'; // 旧版本 Key，用于兼容读取
-const STORAGE_KEY = 'MUSHROOM_HELPER_GLOBAL_V4';    // 升级为 V4
+const V2_STORAGE_KEY = 'MUSHROOM_HELPER_GLOBAL_V2';
+const V3_STORAGE_KEY = 'MUSHROOM_HELPER_GLOBAL_V3';
+const V4_STORAGE_KEY = 'MUSHROOM_HELPER_GLOBAL_V4'; // 保留 V4 Key 用于迁移
+const STORAGE_KEY = 'MUSHROOM_HELPER_GLOBAL_V5';    // 升级为 V5
 const TAB_STORAGE_KEY = 'MUSHROOM_HELPER_ACTIVE_TAB';
 const ENC_ORDER_ACTIVE_KEY = 'MUSHROOM_HELPER_ENC_ORDER_ACTIVE';
 
@@ -55,24 +70,45 @@ function App() {
     // --- Global State ---
     const [globalData, setGlobalData] = useState<GlobalStorage>(() => {
         try {
-            // 尝试读取 V4
+            // 1. 尝试读取 V5 (最新版)
             const savedGlobal = localStorage.getItem(STORAGE_KEY);
             if (savedGlobal) {
                 const parsed = JSON.parse(savedGlobal);
                 parsed.profiles = parsed.profiles.map((p: any) => ({
                     ...p,
                     data: {
-                        ...SAFE_INITIAL_DATA,
+                        ...SAFE_INITIAL_DATA, // 兜底默认值
                         ...p.data,
-                        // 确保 growing 存在
-                        growing: p.data.growing || {}
+                        // 再次确保字段存在 (防御性编程)
+                        growing: p.data.growing || {},
+                        actionHistory: p.data.actionHistory || [],
+                        importHistory: p.data.importHistory || []
                     }
                 }));
                 if (!parsed.recentIds) parsed.recentIds = [];
                 return parsed;
             }
 
-            // 向后兼容 V3
+            // 2. 向后兼容 V4 -> V5
+            const savedV4 = localStorage.getItem(V4_STORAGE_KEY);
+            if (savedV4) {
+                const parsed = JSON.parse(savedV4);
+                parsed.profiles = parsed.profiles.map((p: any) => ({
+                    ...p,
+                    data: {
+                        ...SAFE_INITIAL_DATA,
+                        ...p.data,
+                        // V4 已有 growing，直接保留
+                        // V4 没有 history，初始化为空数组
+                        actionHistory: [],
+                        importHistory: []
+                    }
+                }));
+                // V4 已有 recentIds
+                return {...parsed, recentIds: parsed.recentIds || []};
+            }
+
+            // 3. 向后兼容 V3 -> V5
             const savedV3 = localStorage.getItem(V3_STORAGE_KEY);
             if (savedV3) {
                 const parsed = JSON.parse(savedV3);
@@ -81,13 +117,15 @@ function App() {
                     data: {
                         ...SAFE_INITIAL_DATA,
                         ...p.data,
-                        growing: {} // V3 -> V4: 初始化培育中状态为 0
+                        growing: {},       // V3 无 growing
+                        actionHistory: [], // V3 无 history
+                        importHistory: []
                     }
                 }));
                 return {...parsed, recentIds: parsed.recentIds || []};
             }
 
-            // 向后兼容 V2
+            // 4. 向后兼容 V2 -> V5
             const savedV2 = localStorage.getItem(V2_STORAGE_KEY);
             if (savedV2) {
                 const parsed = JSON.parse(savedV2);
@@ -96,13 +134,15 @@ function App() {
                     data: {
                         ...SAFE_INITIAL_DATA,
                         ...p.data,
-                        growing: {} // V2 -> V4
+                        growing: {},
+                        actionHistory: [],
+                        importHistory: []
                     }
                 }));
                 return {...parsed, recentIds: []};
             }
 
-            // 3. 尝试读取更早的 V1 数据
+            // 5. 尝试读取更早的 V1 数据
             const savedOld = localStorage.getItem(OLD_STORAGE_KEY);
             if (savedOld) {
                 const oldData = JSON.parse(savedOld);
@@ -115,7 +155,7 @@ function App() {
         } catch (e) {
             console.error("Load failed", e);
         }
-        // 4. 默认初始化
+        // 6. 默认初始化 (新用户)
         return {
             activeProfileId: 'default',
             profiles: [{id: 'default', name: '默认存档', data: SAFE_INITIAL_DATA}],
@@ -143,7 +183,7 @@ function App() {
 
     const [filterIntent, setFilterIntent] = useState<FilterIntent | null>(null);
 
-    // 1. 新增：将 PlanPanel 的筛选状态提升到 App 中管理，以便切换 Tab 后保留
+    // 将 PlanPanel 的筛选状态提升到 App 中管理
     const [planFilters, setPlanFilters] = useState({
         wood: 'all',
         status: 'all',
@@ -202,7 +242,7 @@ function App() {
         });
     };
 
-    // 2. 新增：更新 growing 状态的帮助函数
+    // 更新 growing 状态的帮助函数
     const updateGrowingCount = (id: string, delta: number) => {
         setData(prev => {
             const current = prev.growing?.[id] || 0;
@@ -231,33 +271,150 @@ function App() {
         };
     }, [data.collectedMushrooms, isEncOrderActive]);
 
-    // 修改点 3: toggleCollection 逻辑增强 (确认提示 & 记录)
+    // --- History & Collection Logic ---
+
+    // 添加操作历史
+    const addActionHistory = (id: string, type: 'collect' | 'uncollect') => {
+        setData(prev => {
+            const newRecord: ActionRecord = {mushroomId: id, type, timestamp: Date.now()};
+            const currentHistory = prev.actionHistory || [];
+            return {...prev, actionHistory: [newRecord, ...currentHistory].slice(0, 10)};
+        });
+    };
+
+    // Toggle Collection
     const toggleCollection = (id: string) => {
         const list = data.collectedMushrooms || [];
         const isCollected = list.includes(id);
 
         if (isCollected) {
-            // 取消收集：检查库存
             const currentStock = data.inventory[id] || 0;
             if (currentStock > 0) {
-                // 修改点：确认后仅解除标记，不强制清空
                 if (!window.confirm(`⚠️ 该菌种库存还有 ${currentStock} 个。\n确认要取消“已收集”标记吗？\n(操作将仅移除图鉴标记，库存保留)`)) {
-                    return; // 用户取消，终止操作
+                    return;
                 }
             }
-            addToRecent(id);
+            addActionHistory(id, 'uncollect');
             setData(prev => ({
                 ...prev,
                 collectedMushrooms: (prev.collectedMushrooms || []).filter(x => x !== id)
             }));
         } else {
-            // 标记收集
-            addToRecent(id);
+            addActionHistory(id, 'collect');
             setData(prev => ({
                 ...prev,
                 collectedMushrooms: [...list, id]
             }));
         }
+    };
+
+    // 撤销单次操作
+    const handleUndoAction = (record: ActionRecord) => {
+        setData(prev => {
+            const list = prev.collectedMushrooms || [];
+            let newList = list;
+
+            if (record.type === 'collect') {
+                newList = list.filter(id => id !== record.mushroomId);
+            } else {
+                if (!list.includes(record.mushroomId)) newList = [...list, record.mushroomId];
+            }
+
+            const newHistory = (prev.actionHistory || []).filter(r => r !== record);
+
+            return {...prev, collectedMushrooms: newList, actionHistory: newHistory};
+        });
+    };
+
+    // 批量导入图鉴（全量同步逻辑）
+    const handleImportEncyclopediaText = (text: string) => {
+        const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l);
+        const recognizedIds = new Set<string>();
+        const unrecognizedLines: string[] = [];
+
+        lines.forEach(line => {
+            const m = MUSHROOM_DB.find(db => db.name === line);
+            if (m) {
+                recognizedIds.add(m.id);
+            } else {
+                unrecognizedLines.push(line);
+            }
+        });
+
+        if (recognizedIds.size === 0 && lines.length > 0) {
+            alert("⚠️ 未识别到任何有效菌种名称，请检查文件格式。");
+            return;
+        }
+
+        const currentCollected = new Set(data.collectedMushrooms || []);
+        const addedIds: string[] = [];
+        const removedIds: string[] = [];
+
+        MUSHROOM_DB.forEach(m => {
+            const isCurrentlyCollected = currentCollected.has(m.id);
+            const isInImport = recognizedIds.has(m.id);
+
+            if (!isCurrentlyCollected && isInImport) {
+                addedIds.push(m.id);
+            } else if (isCurrentlyCollected && !isInImport) {
+                removedIds.push(m.id);
+            }
+        });
+
+        if (addedIds.length === 0 && removedIds.length === 0) {
+            alert("✅ 图鉴状态已是最新，无变化。");
+            return;
+        }
+
+        if (!window.confirm(`解析完成！\n即将更新图鉴状态：\n➕ 新增收集: ${addedIds.length} 个\n➖ 取消收集: ${removedIds.length} 个\n❓ 未识别行: ${unrecognizedLines.length} 行\n\n是否应用？`)) {
+            return;
+        }
+
+        setData(prev => {
+            const importRecord: ImportRecord = {
+                id: Date.now().toString(),
+                timestamp: Date.now(),
+                addedIds,
+                removedIds,
+                unrecognized: unrecognizedLines
+            };
+
+            const newCollectedList = Array.from(recognizedIds);
+
+            return {
+                ...prev,
+                collectedMushrooms: newCollectedList,
+                importHistory: [importRecord, ...(prev.importHistory || [])].slice(0, 10)
+            };
+        });
+    };
+
+    // 撤销导入
+    const handleUndoImport = (record: ImportRecord) => {
+        if (!window.confirm('确定要撤销这次导入操作吗？图鉴状态将回滚。')) return;
+
+        setData(prev => {
+            const currentSet = new Set(prev.collectedMushrooms || []);
+            record.addedIds.forEach(id => currentSet.delete(id));
+            record.removedIds.forEach(id => currentSet.add(id));
+
+            const newHistory = (prev.importHistory || []).filter(r => r.id !== record.id);
+
+            return {
+                ...prev,
+                collectedMushrooms: Array.from(currentSet),
+                importHistory: newHistory
+            };
+        });
+    };
+
+    // 删除导入记录
+    const handleDeleteImportRecord = (recordId: string) => {
+        if (!window.confirm('删除记录后将无法撤销此次操作，确认删除？')) return;
+        setData(prev => ({
+            ...prev,
+            importHistory: (prev.importHistory || []).filter(r => r.id !== recordId)
+        }));
     };
 
     const handleBatchCollect = (ids: string[]) => {
@@ -335,10 +492,21 @@ function App() {
         reader.onload = (ev) => {
             try {
                 const json = JSON.parse(ev.target?.result as string);
+                // 检查必要的字段
                 if (!json.orders || !json.inventory) {
                     throw new Error('文件格式不正确，缺少订单或库存数据');
                 }
                 const fileName = file.name.replace('.json', '');
+
+                // 准备合并后的数据对象
+                const mergedData = {
+                    ...SAFE_INITIAL_DATA,
+                    ...json,
+                    // 显式保留历史记录，防止被覆盖为 undefined
+                    actionHistory: json.actionHistory || [],
+                    importHistory: json.importHistory || []
+                };
+
                 const userChoice = window.confirm(
                     `成功读取存档文件！\n\n【确定】-> 作为“新存档”导入\n【取消】-> 覆盖“当前存档”(${currentProfile.name})`
                 );
@@ -351,13 +519,13 @@ function App() {
                         profiles: [...prev.profiles, {
                             id: newId,
                             name: `导入: ${fileName}`,
-                            data: {...SAFE_INITIAL_DATA, ...json}
+                            data: mergedData // 使用增强后的数据
                         }]
                     }));
                     alert(`✅ 已新建存档: 导入: ${fileName}`);
                 } else {
                     if (window.confirm(`⚠️ 警告：这将完全覆盖当前存档 "${currentProfile.name}" 的所有数据。\n是否继续？`)) {
-                        setData({...SAFE_INITIAL_DATA, ...json});
+                        setData(mergedData); // 使用增强后的数据
                         alert('✅ 当前存档已更新');
                     }
                 }
@@ -411,7 +579,13 @@ function App() {
                 if (json.profiles && Array.isArray(json.profiles)) {
                     json.profiles = json.profiles.map((p: any) => ({
                         ...p,
-                        data: {...SAFE_INITIAL_DATA, ...p.data}
+                        data: {
+                            ...SAFE_INITIAL_DATA, // 1. 先铺垫默认值
+                            ...p.data,            // 2. 覆盖备份数据
+                            // 3. 强制兜底：确保历史记录字段存在（防止备份里的 null 覆盖默认空数组）
+                            actionHistory: p.data.actionHistory || [],
+                            importHistory: p.data.importHistory || []
+                        }
                     }));
                     // 兼容旧备份：如果没有 recentIds，则补上空数组
                     if (!json.recentIds) json.recentIds = [];
@@ -429,7 +603,6 @@ function App() {
     };
 
     const handleExport = () => {
-        // 直接导出 globalData，现在包含了 recentIds
         const blob = new Blob([JSON.stringify(globalData)], {type: 'application/json'});
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
@@ -616,21 +789,28 @@ function App() {
                         collectedIds={data.collectedMushrooms || []}
                         onToggleCollection={toggleCollection}
                         onBatchCollect={handleBatchCollect}
-                        unlockedWoods={data.unlockedWoods}
-                        unlockedLights={data.unlockedLights}
-                        unlockedHumidifiers={data.unlockedHumidifiers}
+                        unlockedWoods={data.unlockedWoods as WoodType[]}
+                        unlockedLights={data.unlockedLights as LightType[]}
+                        unlockedHumidifiers={data.unlockedHumidifiers as HumidifierType[]}
                         inventory={data.inventory}
-                        recentIds={globalData.recentIds || []}
+                        // 新增的 props
+                        actionHistory={data.actionHistory || []}
+                        onUndoAction={handleUndoAction}
+                        importHistory={data.importHistory || []}
+                        onImportText={handleImportEncyclopediaText}
+                        onUndoImport={handleUndoImport}
+                        onDeleteImportRecord={handleDeleteImportRecord}
                         growingCounts={data.growing || {}}
                     />
                 </Suspense>
             ) : (
                 <div className="main-layout">
                     <div style={{display: 'flex', flexDirection: 'column', gap: 10}}>
-                        {/* 修改：增加 ID 锚点 */}
                         <div id="panel-equipment">
-                            <EquipmentPanel unlockedWoods={data.unlockedWoods} unlockedLights={data.unlockedLights}
-                                            unlockedHumidifiers={data.unlockedHumidifiers} onToggle={toggleEquipment}/>
+                            <EquipmentPanel unlockedWoods={data.unlockedWoods as WoodType[]}
+                                            unlockedLights={data.unlockedLights as LightType[]}
+                                            unlockedHumidifiers={data.unlockedHumidifiers as HumidifierType[]}
+                                            onToggle={toggleEquipment}/>
                         </div>
                         <div id="panel-inventory">
                             <InventoryPanel
@@ -643,7 +823,6 @@ function App() {
                             />
                         </div>
                         <div id="panel-orders">
-                            {/* 修改：传入联动回调 */}
                             <OrderPanel
                                 orders={data.orders}
                                 virtualOrder={virtualEncyclopediaOrder}
@@ -657,9 +836,9 @@ function App() {
                                 onArchiveOrder={handleArchiveOrder}
                                 onAddItem={addItemToOrder} onUpdateItemCount={updateItemCount}
                                 onRemoveItem={removeItemFromOrder}
-                                unlockedWoods={data.unlockedWoods}
-                                unlockedLights={data.unlockedLights}
-                                unlockedHumidifiers={data.unlockedHumidifiers}
+                                unlockedWoods={data.unlockedWoods as WoodType[]}
+                                unlockedLights={data.unlockedLights as LightType[]}
+                                unlockedHumidifiers={data.unlockedHumidifiers as HumidifierType[]}
                                 inventory={data.inventory}
                                 onFilterIntentChange={setFilterIntent}
                             />
@@ -667,7 +846,6 @@ function App() {
                     </div>
 
                     <div id="panel-plan">
-                        {/* 2. 修改：传递 filters 状态和相关回调给 PlanPanel */}
                         <PlanPanel
                             plan={calculationResult}
                             onCompleteTask={handleCompleteTask}
@@ -688,7 +866,6 @@ function App() {
                             filters={planFilters}
                             onUpdateFilters={setPlanFilters}
                             onConsumeFilterIntent={() => setFilterIntent(null)}
-                            // 传入 growing 数据和更新函数
                             growingCounts={data.growing || {}}
                             onUpdateGrowing={updateGrowingCount}
                         />

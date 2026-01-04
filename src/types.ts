@@ -97,15 +97,35 @@ export interface Order {
     active: boolean; // 是否要做这个订单
 }
 
-// 用户存档数据
+// 新增：单次操作记录
+export interface ActionRecord {
+    mushroomId: string;
+    type: 'collect' | 'uncollect';
+    timestamp: number;
+}
+
+// 新增：批量导入记录
+export interface ImportRecord {
+    id: string; // 唯一标识，用于撤销/删除
+    timestamp: number;
+    addedIds: string[];      // 新增的（原本未收集 -> 导入后收集）
+    removedIds: string[];    // 移除的（原本已收集 -> 导入后未收集）
+    unrecognized: string[];  // 未识别的文本行
+}
+
+// 修改 UserSaveData
 export interface UserSaveData {
     orders: Order[];
-    inventory: Record<string, number>; // mushroomId -> count (库存)
-    growing?: Record<string, number>;
-    unlockedWoods: WoodType[];
-    unlockedLights: LightType[];
-    unlockedHumidifiers: HumidifierType[];
+    inventory: Record<string, number>;
+    unlockedWoods: string[];
+    unlockedLights: string[];
+    unlockedHumidifiers: string[];
     collectedMushrooms: string[];
+    growing: Record<string, number>;
+
+    // 新增历史记录字段
+    actionHistory?: ActionRecord[]; // 最近操作历史
+    importHistory?: ImportRecord[]; // 导入历史
 }
 
 export interface Profile {
