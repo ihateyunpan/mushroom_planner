@@ -34,31 +34,70 @@ const MushroomCardItem: React.FC<{
     m: MushroomDef;
     isCollected: boolean;
     hasStock: boolean;
+    isGrowing: boolean;
     onToggle: (id: string) => void;
     unlockedWoods: WoodType[];
     unlockedLights: LightType[];
     unlockedHumidifiers: HumidifierType[];
-}> = ({m, isCollected, hasStock, onToggle}) => {
-    // 动态样式：如果有库存且未收集，给一个特殊的边框和背景
-    const borderStyle = isCollected
-        ? '2px solid #81c784'
-        : (hasStock ? '2px solid #ef5350' : '2px dashed #ffb74d'); // 红色实线强调
+}> = ({m, isCollected, hasStock, isGrowing, onToggle}) => {
 
-    const bgStyle = isCollected
-        ? '#fff'
-        : (hasStock ? '#ffebee' : '#fff8e1'); // 红色背景强调
+    // 样式重构：未收集用彩色底，已收集用白底，全都不灰度
+    const cardStyles = (() => {
+        // 1. ✅ 已收集：回归平淡，白底绿边，代表“已完成/归档”
+        if (isCollected) {
+            return {
+                border: '1px solid #81c784',  // 绿色实线
+                background: '#ffffff',        // 纯白背景
+                opacity: 1,
+                filter: 'none',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.1)' // 轻微阴影
+            };
+        }
+
+        // 2. 🎒 有库存 (未收集)：红色高亮，提示“快去交”
+        if (hasStock) {
+            return {
+                border: '2px solid #ef5350',  // 红色粗实线
+                background: '#ffebee',        // 红色背景
+                opacity: 1,
+                filter: 'none',
+                boxShadow: '0 4px 12px rgba(239, 83, 80, 0.25)' // 较强阴影
+            };
+        }
+
+        // 3. ⏳ 收集中 (未收集)：橙色高亮，提示“正在种”
+        if (isGrowing) {
+            return {
+                border: '2px dashed #ff9800', // 橙色粗虚线 (颜色加深一点以便看清)
+                background: '#fff3e0',        // 橙色背景
+                opacity: 1,
+                filter: 'none',
+                boxShadow: '0 4px 12px rgba(255, 152, 0, 0.25)'
+            };
+        }
+
+        // 4. ⬜ 普通未收集：灰色底，但图片保持彩色
+        return {
+            border: '1px dashed #bdbdbd',     // 灰色虚线
+            background: '#f5f5f5',            // 浅灰背景 (区别于已收集的白色)
+            opacity: 1,                       // 保持不透明
+            filter: 'none',                   // 关键：移除灰度，显示彩色 Avatar
+            boxShadow: 'none'
+        };
+    })();
 
     return (
         <div
             style={{
-                border: borderStyle,
-                borderRadius: 8, padding: 15,
-                background: bgStyle,
-                boxShadow: isCollected ? '0 2px 8px rgba(76, 175, 80, 0.2)' : '0 2px 5px rgba(0,0,0,0.05)',
-                display: 'flex', flexDirection: 'column', gap: 10,
+                ...cardStyles,
+                borderRadius: 8,
+                padding: 15,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 10,
                 cursor: 'default',
-                position: 'relative', transition: 'all 0.2s',
-                opacity: 1
+                position: 'relative',
+                transition: 'all 0.2s',
             }}
         >
             <div
@@ -71,10 +110,12 @@ const MushroomCardItem: React.FC<{
                     fontSize: 20, zIndex: 1,
                     cursor: 'pointer',
                     padding: '10px 15px',
+                    // 如果未收集，让勾选框稍微明显一点
+                    opacity: isCollected ? 1 : 0.6
                 }}
                 title={isCollected ? "点击取消收集" : "点击标记为已收集"}
             >
-                {isCollected ? '✅' : <span style={{opacity: 0.3, filter: 'grayscale(100%)'}}>⬜</span>}
+                {isCollected ? '✅' : '⬜'}
             </div>
 
             <div style={{display: 'flex', gap: 12}}>
@@ -82,16 +123,16 @@ const MushroomCardItem: React.FC<{
                 <div>
                     <div style={{
                         fontWeight: 'bold', fontSize: 15,
-                        color: isCollected ? '#333' : '#e65100'
+                        // 已收集用黑色，未收集用深色强调
+                        color: isCollected ? '#333' : '#000'
                     }}>{m.name}</div>
                     <div style={{fontSize: 12, color: '#999', marginTop: 4}}>ID: {m.id}</div>
+
                     {!isCollected && (
-                        <div style={{marginTop: 4}}>
-                            <span style={{fontSize: 11, color: '#e65100', fontWeight: 'bold'}}>未收集</span>
-                            {/* 修改点 4: 标出来 */}
+                        <div style={{marginTop: 4, display: 'flex', alignItems: 'center', gap: 6}}>
+                            <span style={{fontSize: 11, color: '#616161', fontWeight: 'bold'}}>未收集</span>
                             {hasStock && (
                                 <span style={{
-                                    marginLeft: 6,
                                     fontSize: 10,
                                     background: '#d32f2f',
                                     color: '#fff',
@@ -100,11 +141,28 @@ const MushroomCardItem: React.FC<{
                                     fontWeight: 'bold'
                                 }}>有库存</span>
                             )}
+                            {!hasStock && isGrowing && (
+                                <span style={{
+                                    fontSize: 10,
+                                    background: '#ff9800',
+                                    color: '#fff',
+                                    padding: '2px 5px',
+                                    borderRadius: 4,
+                                    fontWeight: 'bold'
+                                }}>⏳ 收集中</span>
+                            )}
                         </div>
                     )}
                 </div>
             </div>
-            <hr style={{border: 0, borderTop: isCollected ? '1px dashed #eee' : '1px dashed #ffcc80', margin: 0}}/>
+
+            <hr style={{
+                border: 0,
+                // 分割线颜色随状态变化
+                borderTop: isCollected ? '1px dashed #eee' : '1px dashed #e0e0e0',
+                margin: 0
+            }}/>
+
             <div style={{fontSize: 12, display: 'flex', flexDirection: 'column', gap: 5}}>
                 {/* ... existing environment info render ... */}
                 <div style={{display: 'flex', alignItems: 'center', gap: 6}}>
@@ -121,6 +179,7 @@ const MushroomCardItem: React.FC<{
                 {m.special && (
                     (() => {
                         const style = getSpecialStyle(m.special);
+                        // 特殊情况模块保持原色，不随卡片灰度（现在卡片本身也没灰度了）
                         return (
                             <div style={{
                                 marginTop: 4, background: style.bg, padding: '6px 8px', borderRadius: 6,
@@ -183,6 +242,7 @@ interface EncyclopediaProps {
     unlockedHumidifiers: HumidifierType[];
     inventory: Record<string, number>; // 新增
     recentIds: string[]; // 新增，替代内部 state
+    growingCounts: Record<string, number>;
 }
 
 export const Encyclopedia: React.FC<EncyclopediaProps> = ({
@@ -193,7 +253,8 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
                                                               unlockedLights,
                                                               unlockedHumidifiers,
                                                               inventory,
-                                                              recentIds
+                                                              recentIds,
+                                                              growingCounts
                                                           }) => {
     // Refs for scrolling
     const topRef = useRef<HTMLDivElement>(null);
@@ -250,31 +311,49 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
         });
     }, [filters, searchTerm, collectedIds, checkToolsReady]);
 
-    // --- 修改点 4: 排序逻辑优化 (有库存未收集置顶) ---
+    // --- 排序逻辑优化 ---
     const sortedDisplayList = useMemo(() => {
         return [...filteredList].sort((a, b) => {
             const isACollected = collectedIds.includes(a.id);
             const isBCollected = collectedIds.includes(b.id);
 
-            // 1. 已收集的沉底
+            // 1. 已收集的沉底 (放在列表最末尾)
             if (isACollected !== isBCollected) return isACollected ? 1 : -1;
 
-            // 2. 如果都未收集，检查是否有库存
+            // 2. 如果都未收集，按照 B(有库存) -> A(收集中) -> C(无) 排序
             if (!isACollected) {
+                // 判断状态
                 const stockA = (inventory[a.id] || 0) > 0;
                 const stockB = (inventory[b.id] || 0) > 0;
-                // 有库存的优先
-                if (stockA !== stockB) return stockA ? -1 : 1;
+                const growingA = (growingCounts[a.id] || 0) > 0;
+                const growingB = (growingCounts[b.id] || 0) > 0;
 
-                // 3. 然后按严格度
-                const scoreA = getStrictnessScore(a);
-                const scoreB = getStrictnessScore(b);
+                // 定义优先级分数 (分数越高越靠前)
+                // 3分: B类 (有库存)
+                // 2分: A类 (无库存但收集中)
+                // 1分: C类 (啥都没)
+                const getScore = (hasStock: boolean, isGrowing: boolean) => {
+                    if (hasStock) return 3;
+                    if (isGrowing) return 2;
+                    return 1;
+                };
+
+                const scoreA = getScore(stockA, growingA);
+                const scoreB = getScore(stockB, growingB);
+
+                // 优先级不同，高分在前
                 if (scoreA !== scoreB) return scoreB - scoreA;
+
+                // 3. 同优先级下，按“严格度”降序 (难养的在前)
+                const strictA = getStrictnessScore(a);
+                const strictB = getStrictnessScore(b);
+                if (strictA !== strictB) return strictB - strictA;
             }
 
+            // 4. 最后按数据库默认顺序
             return MUSHROOM_DB.indexOf(a) - MUSHROOM_DB.indexOf(b);
         });
-    }, [filteredList, collectedIds, inventory]);
+    }, [filteredList, collectedIds, inventory, growingCounts]); // 别忘了把 growingCounts 加入依赖数组
 
     // ... (missingEnvironments logic unchanged) ...
     const missingEnvironments = useMemo(() => {
@@ -504,6 +583,7 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
                                 m={m}
                                 isCollected={collectedIds.includes(m.id)}
                                 hasStock={(inventory[m.id] || 0) > 0}
+                                isGrowing={(growingCounts[m.id] || 0) > 0}
                                 onToggle={handleToggle}
                                 unlockedWoods={unlockedWoods}
                                 unlockedLights={unlockedLights}
@@ -630,6 +710,7 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
                                 m={m}
                                 isCollected={isCollected}
                                 hasStock={(inventory[m.id] || 0) > 0}
+                                isGrowing={(growingCounts[m.id] || 0) > 0}
                                 onToggle={handleToggle}
                                 unlockedWoods={unlockedWoods}
                                 unlockedLights={unlockedLights}

@@ -26,11 +26,13 @@ const SAFE_INITIAL_DATA: UserSaveData = {
     unlockedLights: Object.values(Lights).slice(0, 1),
     unlockedHumidifiers: Object.values(Humidifiers).slice(0, 1),
     collectedMushrooms: [],
+    growing: {}, // <--- 核心修复：在这里添加默认值，所有版本（包括V1）和新存档就都自动兼容了
 };
 
 const OLD_STORAGE_KEY = 'MUSHROOM_HELPER_DATA_V1';
 const V2_STORAGE_KEY = 'MUSHROOM_HELPER_GLOBAL_V2'; // 旧版本 Key，用于兼容读取
-const STORAGE_KEY = 'MUSHROOM_HELPER_GLOBAL_V3';     // 新版本 Key
+const V3_STORAGE_KEY = 'MUSHROOM_HELPER_GLOBAL_V3'; // 旧版本 Key，用于兼容读取
+const STORAGE_KEY = 'MUSHROOM_HELPER_GLOBAL_V4';    // 升级为 V4
 const TAB_STORAGE_KEY = 'MUSHROOM_HELPER_ACTIVE_TAB';
 const ENC_ORDER_ACTIVE_KEY = 'MUSHROOM_HELPER_ENC_ORDER_ACTIVE';
 
@@ -53,28 +55,50 @@ function App() {
     // --- Global State ---
     const [globalData, setGlobalData] = useState<GlobalStorage>(() => {
         try {
-            // 1. 尝试读取最新的 V3 数据
+            // 尝试读取 V4
             const savedGlobal = localStorage.getItem(STORAGE_KEY);
             if (savedGlobal) {
                 const parsed = JSON.parse(savedGlobal);
                 parsed.profiles = parsed.profiles.map((p: any) => ({
                     ...p,
-                    data: {...SAFE_INITIAL_DATA, ...p.data}
+                    data: {
+                        ...SAFE_INITIAL_DATA,
+                        ...p.data,
+                        // 确保 growing 存在
+                        growing: p.data.growing || {}
+                    }
                 }));
-                // 确保 recentIds 存在
                 if (!parsed.recentIds) parsed.recentIds = [];
                 return parsed;
             }
 
-            // 2. 如果没有 V3，尝试读取 V2 数据 (向后兼容)
+            // 向后兼容 V3
+            const savedV3 = localStorage.getItem(V3_STORAGE_KEY);
+            if (savedV3) {
+                const parsed = JSON.parse(savedV3);
+                parsed.profiles = parsed.profiles.map((p: any) => ({
+                    ...p,
+                    data: {
+                        ...SAFE_INITIAL_DATA,
+                        ...p.data,
+                        growing: {} // V3 -> V4: 初始化培育中状态为 0
+                    }
+                }));
+                return {...parsed, recentIds: parsed.recentIds || []};
+            }
+
+            // 向后兼容 V2
             const savedV2 = localStorage.getItem(V2_STORAGE_KEY);
             if (savedV2) {
                 const parsed = JSON.parse(savedV2);
                 parsed.profiles = parsed.profiles.map((p: any) => ({
                     ...p,
-                    data: {...SAFE_INITIAL_DATA, ...p.data}
+                    data: {
+                        ...SAFE_INITIAL_DATA,
+                        ...p.data,
+                        growing: {} // V2 -> V4
+                    }
                 }));
-                // 迁移：初始化空的 recentIds
                 return {...parsed, recentIds: []};
             }
 
@@ -174,6 +198,18 @@ function App() {
             return {
                 ...prev,
                 profiles: prev.profiles.map(p => p.id === activeId ? {...p, data: newData} : p)
+            };
+        });
+    };
+
+    // 2. 新增：更新 growing 状态的帮助函数
+    const updateGrowingCount = (id: string, delta: number) => {
+        setData(prev => {
+            const current = prev.growing?.[id] || 0;
+            const newCount = Math.max(0, current + delta);
+            return {
+                ...prev,
+                growing: {...(prev.growing || {}), [id]: newCount}
             };
         });
     };
@@ -584,8 +620,8 @@ function App() {
                         unlockedLights={data.unlockedLights}
                         unlockedHumidifiers={data.unlockedHumidifiers}
                         inventory={data.inventory}
-                        // 读取 globalData 中的最近记录
                         recentIds={globalData.recentIds || []}
+                        growingCounts={data.growing || {}}
                     />
                 </Suspense>
             ) : (
@@ -603,6 +639,7 @@ function App() {
                                 activeDemandMap={activeDemandMap}
                                 encyclopediaDemandMap={encyclopediaDemandMap}
                                 onUpdate={updateInventory}
+                                growingCounts={data.growing || {}}
                             />
                         </div>
                         <div id="panel-orders">
@@ -612,6 +649,7 @@ function App() {
                                 virtualOrder={virtualEncyclopediaOrder}
                                 onToggleVirtualOrder={(active) => setIsEncOrderActive(active)}
                                 newOrderName={newOrderName} onNewOrderNameChange={setNewOrderName}
+                                growingCounts={data.growing || {}}
                                 onAddOrder={addOrder}
                                 editingOrderIds={editingOrderIds} onToggleEdit={toggleOrderEdit}
                                 onDeleteOrder={deleteOrder}
@@ -646,12 +684,13 @@ function App() {
                                 handleAddOne(id);
                             }}
                             collectedIds={data.collectedMushrooms || []}
-
-                            // 新增以下三个 props:
                             filterIntent={filterIntent}
                             filters={planFilters}
                             onUpdateFilters={setPlanFilters}
                             onConsumeFilterIntent={() => setFilterIntent(null)}
+                            // 传入 growing 数据和更新函数
+                            growingCounts={data.growing || {}}
+                            onUpdateGrowing={updateGrowingCount}
                         />
                     </div>
                 </div>

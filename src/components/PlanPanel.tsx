@@ -36,6 +36,8 @@ interface PlanPanelProps {
         orderIds: string[];
     }>>;
     onConsumeFilterIntent: () => void;
+    growingCounts: Record<string, number>;
+    onUpdateGrowing: (id: string, delta: number) => void;
 }
 
 export const PlanPanel: React.FC<PlanPanelProps> = ({
@@ -47,13 +49,13 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                         filterIntent,
                                                         filters,
                                                         onUpdateFilters,
-                                                        onConsumeFilterIntent
+                                                        onConsumeFilterIntent,
+                                                        growingCounts,
+                                                        onUpdateGrowing,
                                                     }) => {
     const [activePopoverId, setActivePopoverId] = useState<string | null>(null);
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [isNavOpen, setIsNavOpen] = useState(false);
-    // 新增：记录已救助但未长成的菌子数量 (Key: mushroomId, Value: count)
-    const [growingCounts, setGrowingCounts] = useState<Record<string, number>>({});
 
     // Tab 状态，默认显示白天
     const [activeTimeTab, setActiveTimeTab] = useState<'day' | 'night'>('day');
@@ -612,10 +614,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                     <button
                                                         onClick={(e) => {
                                                             e.stopPropagation(); // 防止折叠面板误触
-                                                            setGrowingCounts(prev => ({
-                                                                ...prev,
-                                                                [t.targetId]: (prev[t.targetId] || 0) + 1
-                                                            }));
+                                                            onUpdateGrowing(t.targetId, 1);
                                                         }}
                                                         title="标记一个为培育中 (库存+1)"
                                                         style={{
@@ -802,10 +801,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                             onAddOne(task.mushroom.id);
                                             // 2. 新操作：培育中数量-1 (如果大于0)
                                             if (growingCounts[task.mushroom.id] > 0) {
-                                                setGrowingCounts(prev => ({
-                                                    ...prev,
-                                                    [task.mushroom.id]: prev[task.mushroom.id] - 1
-                                                }));
+                                                onUpdateGrowing(task.mushroom.id, -1);
                                             }
                                         }}
                                         style={{

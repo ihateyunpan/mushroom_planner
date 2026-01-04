@@ -10,6 +10,7 @@ interface InventoryPanelProps {
     activeDemandMap: Map<string, number>;
     encyclopediaDemandMap?: Map<string, number>; // 新增：图鉴需求
     onUpdate: (id: string, count: number) => void;
+    growingCounts: Record<string, number>;
 }
 
 export const InventoryPanel: React.FC<InventoryPanelProps> = ({
@@ -17,7 +18,8 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                                                                   relevantMushrooms,
                                                                   activeDemandMap,
                                                                   encyclopediaDemandMap,
-                                                                  onUpdate
+                                                                  onUpdate,
+                                                                  growingCounts
                                                               }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [activePopoverId, setActivePopoverId] = useState<string | null>(null);
@@ -67,6 +69,8 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                             const encNeeded = encyclopediaDemandMap?.get(m.id) || 0;
                             const isEncSatisfied = currentCount >= encNeeded; // 只要有1个就算满足图鉴
 
+                            const growing = growingCounts[m.id] || 0; // 获取培育中数量
+
                             return (
                                 <div key={m.id} style={{
                                     display: 'flex',
@@ -100,13 +104,18 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                                                         订单需: {orderNeeded}
                                                     </span>
                                                 )}
-                                                {encNeeded > 0 && (
+                                                {!isEncSatisfied && (
                                                     <span style={{
                                                         color: isEncSatisfied ? '#999' : '#2e7d32', // 完成变灰，未完成变绿
                                                         fontWeight: isEncSatisfied ? 'normal' : 'bold'
                                                     }}>
                                                         {isEncSatisfied ? '图鉴: OK' : `图鉴需: ${encNeeded}`}
                                                     </span>
+                                                )}
+                                                {growing > 0 && (
+                                                    <span style={{color: '#e65100', marginLeft: 4, fontSize: 11}}>
+                        (⏳{growing})
+                    </span>
                                                 )}
                                             </div>
                                         </div>

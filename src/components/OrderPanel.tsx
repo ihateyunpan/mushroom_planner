@@ -10,6 +10,7 @@ interface OrderPanelProps {
     virtualOrder: Order | null;
     onToggleVirtualOrder: (active: boolean) => void;
     newOrderName: string;
+    growingCounts: Record<string, number>;
     onNewOrderNameChange: (val: string) => void;
     onAddOrder: (nameOverride?: string) => void;
     editingOrderIds: Set<string>;
@@ -82,6 +83,7 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                                                           virtualOrder,
                                                           onToggleVirtualOrder,
                                                           newOrderName,
+                                                          growingCounts,
                                                           onNewOrderNameChange,
                                                           onAddOrder,
                                                           editingOrderIds,
@@ -409,11 +411,29 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                             <div style={{marginTop: 8, fontSize: 13, color: '#6a1b9a'}}>
                                 📊 收集进度：
                                 {(() => {
-                                    const totalUncollected = virtualOrder.items.length;
-                                    const inStockButUncollected = virtualOrder.items.filter(i => (inventory[i.mushroomId] || 0) > 0).length;
-                                    const completelyMissing = totalUncollected - inStockButUncollected;
-                                    return <span
-                                        style={{fontWeight: 'bold'}}>未收集：{completelyMissing}，有库存但未收集：{inStockButUncollected}</span>;
+                                    // 统计三种状态
+                                    let countA = 0; // 待采摘 (无库存，但正在培育)
+                                    let countB = 0; // 有库存 (有库存，未收集)
+                                    let countC = 0; // 未收集 (无库存，也没在培育)
+
+                                    virtualOrder.items.forEach(item => {
+                                        const stock = inventory[item.mushroomId] || 0;
+                                        const growing = growingCounts[item.mushroomId] || 0;
+
+                                        if (stock > 0) {
+                                            countB++; // 优先算作 B类
+                                        } else if (growing > 0) {
+                                            countA++; // 其次算作 A类
+                                        } else {
+                                            countC++; // 剩下的是 C类
+                                        }
+                                    });
+
+                                    return (
+                                        <span style={{fontWeight: 'bold'}}>
+                                            未收集：{countC}，有库存且未收集：{countB}，待采摘：{countA}
+                                        </span>
+                                    );
                                 })()}
                             </div>
                         )}

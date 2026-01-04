@@ -101,10 +101,10 @@ export interface Order {
 export interface UserSaveData {
     orders: Order[];
     inventory: Record<string, number>; // mushroomId -> count (库存)
+    growing?: Record<string, number>;
     unlockedWoods: WoodType[];
     unlockedLights: LightType[];
     unlockedHumidifiers: HumidifierType[];
-    // 新增：已收集的菌种ID列表
     collectedMushrooms: string[];
 }
 
