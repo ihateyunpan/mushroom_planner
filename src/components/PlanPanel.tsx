@@ -665,7 +665,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                     justifyContent: 'space-between',
                                     gap: 10
                                 }}>
-                                    <div style={{display: 'flex', alignItems: 'center', gap: 10, flex: 1}}>
+                                    <div style={{display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0}}>
                                         <Popover content={<MushroomInfoCard m={task.mushroom}/>}
                                                  isOpen={activePopoverId === task.mushroom.id}
                                                  onOpenChange={(isOpen) => setActivePopoverId(isOpen ? task.mushroom.id : null)}>
@@ -718,24 +718,55 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                             style={{border: '1px solid #eee'}}
                                                         />
                                                     </div>
+                                                    {/* 响应式道具标签 */}
                                                     {task.mushroom.save && task.mushroom.special && TOOL_INFO[task.mushroom.special] && (
                                                         (() => {
                                                             const style = getSpecialStyle(task.mushroom.special);
+                                                            const toolName = TOOL_INFO[task.mushroom.special].name;
+                                                            const shortName = toolName.length > 3 ? toolName.slice(-3) : toolName;
+
+                                                            // 基础样式
+                                                            const baseBadgeStyle = {
+                                                                fontSize: 11,
+                                                                color: style.color,
+                                                                background: style.bg,
+                                                                borderRadius: 4,
+                                                                border: `1px solid ${style.border}`,
+                                                                alignItems: 'center',
+                                                                gap: 2,
+                                                                whiteSpace: 'nowrap' as const,
+                                                                height: 18, // 固定高度保证对齐
+                                                                boxSizing: 'border-box' as const
+                                                            };
+
                                                             return (
-                                                                <div style={{
-                                                                    fontSize: 11,
-                                                                    color: style.color,
-                                                                    background: style.bg,
-                                                                    padding: '1px 6px',
-                                                                    borderRadius: 4,
-                                                                    border: `1px solid ${style.border}`,
-                                                                    display: 'flex',
-                                                                    alignItems: 'center',
-                                                                    gap: 2,
-                                                                    whiteSpace: 'nowrap'
-                                                                }}>
-                                                                    <span>{TOOL_INFO[task.mushroom.special].name}</span>
-                                                                </div>
+                                                                <>
+                                                                    {/* 模式1：全名 (宽度充足) */}
+                                                                    <div className="tool-display-full"
+                                                                         style={{...baseBadgeStyle, padding: '0 6px'}}>
+                                                                        <span>🍬 {toolName}</span>
+                                                                    </div>
+
+                                                                    {/* 模式2：后3字 (宽度一般) */}
+                                                                    <div className="tool-display-short"
+                                                                         style={{...baseBadgeStyle, padding: '0 4px'}}>
+                                                                        <span>🍬 {shortName}</span>
+                                                                    </div>
+
+                                                                    {/* 模式3：仅图标 (宽度极窄) */}
+                                                                    <div className="tool-display-icon" title={toolName}
+                                                                         style={{
+                                                                             ...baseBadgeStyle,
+                                                                             padding: 0,
+                                                                             width: 18,
+                                                                             justifyContent: 'center',
+                                                                             borderRadius: '50%' // 变成圆形图标
+                                                                         }}>
+                                                                        <MiniImg
+                                                                            src={TOOL_INFO[task.mushroom.special].img}
+                                                                            size={14}/>
+                                                                    </div>
+                                                                </>
                                                             );
                                                         })()
                                                     )}
@@ -784,7 +815,9 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                             color: '#2e7d32',
                                             fontWeight: 'bold',
                                             padding: '6px 10px',
-                                            height: 'fit-content'
+                                            height: 'fit-content',
+                                            flexShrink: 0,
+                                            whiteSpace: 'nowrap'
                                         }} title="收获 (+1库存, -1培育中)"> +1
                                     </button>
                                 </div>
@@ -805,6 +838,28 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
             position: 'relative',
             paddingBottom: 60
         }}>
+            {/* 1. 插入响应式样式 */}
+            <style>{`
+                /* 默认：显示全名 */
+                .tool-display-full { display: flex !important; }
+                .tool-display-short { display: none !important; }
+                .tool-display-icon { display: none !important; }
+
+                /* 宽度 < 500px：显示后3字 */
+                @media (max-width: 500px) {
+                    .tool-display-full { display: none !important; }
+                    .tool-display-short { display: flex !important; }
+                    .tool-display-icon { display: none !important; }
+                }
+
+                /* 宽度 < 380px：只显示图标 */
+                @media (max-width: 380px) {
+                    .tool-display-full { display: none !important; }
+                    .tool-display-short { display: none !important; }
+                    .tool-display-icon { display: flex !important; }
+                }
+            `}</style>
+
             <div style={{
                 padding: 20,
                 borderBottom: '1px solid #eee',
