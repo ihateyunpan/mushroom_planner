@@ -545,20 +545,6 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
         onBatchCollect(ids);
     };
 
-    const handlePasteImport = async () => {
-        try {
-            const text = await navigator.clipboard.readText();
-            if (!text) {
-                alert('剪贴板为空');
-                return;
-            }
-            onImportText(text);
-        } catch (err) {
-            alert('读取剪贴板失败，请确保授予了权限，或使用文件导入。');
-            console.error(err);
-        }
-    };
-
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
