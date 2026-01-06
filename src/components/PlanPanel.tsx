@@ -115,6 +115,8 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
             const targetOrders = orderGroupsRef.current[groupName] || [];
             const targetIds = targetOrders.map(o => o.id);
             onUpdateFilters(prev => ({ ...prev, orderIds: targetIds }));
+        } else if (filterIntent.type === 'order' && filterIntent.value) {
+            onUpdateFilters(prev => ({ ...prev, orderIds: [filterIntent.value!] }));
         }
 
         // 关键：消费掉 intent，防止切页面回来后重复触发（导致覆盖用户的手动修改）
@@ -139,14 +141,23 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                 const isRelated = batch.tasks.some(task => {
                     return filters.orderIds.some(selectedOid => {
                         const order = orders.find(o => o.id === selectedOid);
-                        return order && order.items.some(i => i.mushroomId === task.mushroom.id);
+                        if (!order) return false;
+
+                        // 1. 找到订单中对应的物品
+                        const item = order.items.find(i => i.mushroomId === task.mushroom.id);
+                        if (!item) return false;
+
+                        // 2. (核心修改) 只有当库存不足时，才允许筛选出该批次
+                        // 如果库存已经够了，即使批次里有这个菌种，也不应该因为这个订单而显示该批次
+                        const currentStock = inventory[item.mushroomId] || 0;
+                        return currentStock < item.count;
                     });
                 });
                 if (!isRelated) return false;
             }
             return true;
         });
-    }, [batches, filters, orders]);
+    }, [batches, filters, orders, inventory]);
 
     // --- 修改：缺失设备提示框的排序逻辑 ---
     const filteredMissingSummary = useMemo(() => {
@@ -205,8 +216,16 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
     const renderBatch = (batch: PlanBatch, _: number, isFlexibleTime: boolean) => {
         const relatedOrderMap = new Map<string, Order>();
         batch.tasks.forEach(t => {
-            orders.filter(o => o.active && o.items.some(i => i.mushroomId === t.mushroom.id))
-                .forEach(o => relatedOrderMap.set(o.id, o));
+            orders.filter(o => {
+                if (!o.active) return false;
+                // 1. 找到订单中对应的物品
+                const item = o.items.find(i => i.mushroomId === t.mushroom.id);
+                // 2. 必须包含该物品
+                if (!item) return false;
+                // 3. (新增) 只有当库存不足时，才建立关联
+                const currentStock = inventory[item.mushroomId] || 0;
+                return currentStock < item.count;
+            }).forEach(o => relatedOrderMap.set(o.id, o));
         });
         const relatedOrders = Array.from(relatedOrderMap.values());
 
@@ -219,25 +238,29 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
             return a.name.localeCompare(b.name);
         });
 
-        let hasEncyclopediaCore = false;      // 是否有核心任务属于图鉴
-        let hasEncyclopediaPassenger = false; // 是否有顺风车任务属于图鉴
+        let hasEncyclopediaCore = false;
+        let hasEncyclopediaPassenger = false;
 
         const virtualOrder = orders.find(o => o.id === VIRTUAL_ORDER_ID);
         if (virtualOrder) {
             batch.tasks.forEach(t => {
-                const isInEncyclopedia = virtualOrder.items.some(i => i.mushroomId === t.mushroom.id);
-                if (isInEncyclopedia) {
-                    if (t.isPassenger) {
-                        hasEncyclopediaPassenger = true;
-                    } else {
-                        hasEncyclopediaCore = true;
+                const item = virtualOrder.items.find(i => i.mushroomId === t.mushroom.id);
+                // (新增) 只有当 item 存在 且 库存不足时，才显示图鉴Tag
+                if (item) {
+                    const currentStock = inventory[item.mushroomId] || 0;
+                    if (currentStock < item.count) {
+                        if (t.isPassenger) {
+                            hasEncyclopediaPassenger = true;
+                        } else {
+                            hasEncyclopediaCore = true;
+                        }
                     }
                 }
             });
         }
 
         const showEncycBadge = hasEncyclopediaCore || hasEncyclopediaPassenger;
-        const isWeakEncycBadge = !hasEncyclopediaCore && hasEncyclopediaPassenger; // 只有顺风车 -> 弱提示(虚线)
+        const isWeakEncycBadge = !hasEncyclopediaCore && hasEncyclopediaPassenger;
 
         const timeWarningGroups: Record<string, { hasCore: boolean, hasPassenger: boolean }> = {};
         batch.tasks.forEach(t => {
@@ -427,12 +450,19 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                             const m = MUSHROOM_DB.find(d => d.id === item.mushroomId);
                                                             if (!m) return null;
                                                             const stock = inventory[item.mushroomId] || 0;
+                                                            const isInBatch = batch.tasks.some(t => t.mushroom.id === item.mushroomId);
+
                                                             return (
                                                                 <div key={item.mushroomId} style={{
                                                                     display: 'flex',
                                                                     alignItems: 'center',
                                                                     justifyContent: 'space-between',
-                                                                    fontSize: 12
+                                                                    fontSize: 12,
+                                                                    background: isInBatch ? '#fff9c4' : 'transparent', // 淡黄色背景
+                                                                    padding: isInBatch ? '4px' : '0',                  // 稍微加点内边距
+                                                                    margin: isInBatch ? '-4px' : '0',                  // 修正内边距带来的偏移
+                                                                    borderRadius: 4,
+                                                                    fontWeight: isInBatch ? 'bold' : 'normal'          // 加粗
                                                                 }}>
                                                                     <div style={{
                                                                         display: 'flex',
@@ -441,7 +471,9 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                                     }}>
                                                                         <MiniImg src={getMushroomImg(m.id)} size={24}
                                                                                  circle/>
-                                                                        <span style={{ color: '#555' }}>{m.name}</span>
+                                                                        <span style={{ color: '#555' }}>
+                                        {isInBatch ? '👉 ' : ''}{m.name}
+                                    </span>
                                                                     </div>
                                                                     <div style={{ fontSize: 11 }}>
                                                                         <span

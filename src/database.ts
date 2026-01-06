@@ -2,6 +2,7 @@
 import {
     Humidifiers,
     type HumidifierType,
+    type ItemRank,
     ItemRanks,
     Lights,
     type LightType,
@@ -36,7 +37,7 @@ export const MUSHROOM_CHILDREN: Record<MushroomChildId, string> = {
 
 // --- 新增：道具详情信息 (来源 + 品级) ---
 
-export const WOOD_INFO: Record<WoodType, { source: string; rank: number }> = {
+export const WOOD_INFO: Record<WoodType, { source: string; rank: ItemRank }> = {
     [Woods.BAI]: { source: '1级', rank: ItemRanks.FAN },
     [Woods.FENG]: { source: '商店出现', rank: ItemRanks.FAN },
     [Woods.SONG]: { source: '6级', rank: ItemRanks.FAN },
@@ -54,7 +55,7 @@ export const WOOD_INFO: Record<WoodType, { source: string; rank: number }> = {
     [Woods.SHU]: { source: '白龙3', rank: ItemRanks.XIAN },
 };
 
-export const LIGHT_INFO: Record<LightType, { source: string; rank: number }> = {
+export const LIGHT_INFO: Record<LightType, { source: string; rank: ItemRank }> = {
     [Lights.HUO]: { source: '2级', rank: ItemRanks.FAN },
     [Lights.HUN]: { source: '5级', rank: ItemRanks.FAN },
     [Lights.TONG]: { source: '11级', rank: ItemRanks.FAN },
@@ -62,7 +63,7 @@ export const LIGHT_INFO: Record<LightType, { source: string; rank: number }> = {
     [Lights.DRAGON]: { source: '白龙3', rank: ItemRanks.XIAN },
 };
 
-export const HUMIDIFIER_INFO: Record<HumidifierType, { source: string; rank: number }> = {
+export const HUMIDIFIER_INFO: Record<HumidifierType, { source: string; rank: ItemRank }> = {
     [Humidifiers.ZHU]: { source: '4级', rank: ItemRanks.FAN },
     [Humidifiers.LIAN]: { source: '8级', rank: ItemRanks.FAN },
     [Humidifiers.TAO]: { source: '14级', rank: ItemRanks.FAN },

@@ -1,7 +1,7 @@
 // src/logic.ts
 import { MUSHROOM_DB } from './database';
-import type { HumidifierType, LightType, MushroomDef, TimeType, UserSaveData, WoodType } from './types';
-import { getEquipmentSortKey } from './utils';
+import type { HumidifierType, LightType, MushroomDef, Order, TimeType, UserSaveData, WoodType } from './types';
+import { getEquipmentSortKey, getMushroomDifficultyScore } from './utils';
 
 // 缺失物品的结构化定义
 export interface MissingItem {
@@ -265,4 +265,36 @@ function groupBy<T>(array: T[], keyFn: (item: T) => string): Record<string, T[]>
         acc[key].push(item);
         return acc;
     }, {} as Record<string, T[]>);
+}
+
+// 2. 核心排序算法
+export function calculateOrderDifficulty(
+    order: Order,
+    inventory: Record<string, number>,
+): number {
+    let remainingEffort = 0;
+    let totalEffort = 0;
+
+    order.items.forEach(item => {
+        const m = MUSHROOM_DB.find(d => d.id === item.mushroomId);
+        if (!m) return;
+
+        // 检查设备是否解锁 (如果缺设备，难度视为无限大)
+        const difficulty = getMushroomDifficultyScore(m);
+        const needed = Math.max(0, item.count - (inventory[item.mushroomId] || 0));
+
+        totalEffort += item.count * difficulty;
+        remainingEffort += needed * difficulty;
+    });
+
+    // 3. 生成排序值 (越小越靠前)
+    // 情况 C: 正常进行中
+    // 逻辑：剩余工作量越小越好。
+    // 为了让 "进度快" 的稍微优先，可以减去一个进度奖励
+    // 例如：剩余工作量 50 (进度10%) vs 剩余工作量 50 (进度90%)
+    // 我们希望后者排前面。
+    const progress = totalEffort > 0 ? (1 - remainingEffort / totalEffort) : 0;
+    const progressReward = progress * 20; // 这是一个调节系数，意味着 100% 的进度相当于减少了 20 点工作量
+
+    return remainingEffort - progressReward;
 }

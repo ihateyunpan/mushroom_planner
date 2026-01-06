@@ -865,6 +865,7 @@ function App() {
                                 unlockedHumidifiers={data.unlockedHumidifiers as HumidifierType[]}
                                 inventory={data.inventory}
                                 onFilterIntentChange={setFilterIntent}
+                                activeOrderIds={planFilters.orderIds}
                             />
                         </div>
                     </div>

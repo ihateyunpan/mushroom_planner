@@ -1,10 +1,11 @@
 // src/components/OrderPanel.tsx
 import React, { useCallback, useMemo, useState } from 'react';
 import { MUSHROOM_DB } from '../database';
-import { getMushroomImg, PROTAGONISTS } from '../utils';
+import { getMushroomImg, getMushroomRankColor, PROTAGONISTS } from '../utils';
 import { CollapsibleSection, MiniImg, MushroomSelector } from './Common';
 import type { FilterIntent, HumidifierType, LightType, Order, WoodType } from '../types';
 import { VIRTUAL_ORDER_ID } from '../types';
+import { calculateOrderDifficulty } from "../logic.ts";
 
 // --- 新增：带缓冲的数字输入框 (解决打字延迟 + 统一样式) ---
 const BufferedCountInput: React.FC<{
@@ -192,6 +193,7 @@ interface OrderPanelProps {
     unlockedHumidifiers: HumidifierType[];
     inventory: Record<string, number>;
     onFilterIntentChange?: (intent: FilterIntent) => void;
+    activeOrderIds?: string[];
 }
 
 // 静态组件：状态徽章
@@ -247,7 +249,8 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                                                           unlockedLights,
                                                           unlockedHumidifiers,
                                                           inventory,
-                                                          onFilterIntentChange
+                                                          onFilterIntentChange,
+                                                          activeOrderIds = [] // 默认空数组
                                                       }) => {
     const [activeProtagonistFilter, setActiveProtagonistFilter] = useState<string | null>(null);
     const [draftItems, setDraftItems] = useState<{ mushroomId: string; count: number }[]>([]);
@@ -358,6 +361,7 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
         });
     }, [inventory]);
 
+    // 过滤并排序订单
     const sortedOrders = useMemo(() => {
         let filtered = orders.filter(o => o.id !== VIRTUAL_ORDER_ID);
 
@@ -374,21 +378,36 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
         return withIndex.sort((a, b) => {
             const orderA = a.order;
             const orderB = b.order;
+
             const isEditingA = editingOrderIds.has(orderA.id);
             const isEditingB = editingOrderIds.has(orderB.id);
             if (isEditingA !== isEditingB) return isEditingA ? -1 : 1;
+
             if (orderA.active !== orderB.active) return orderA.active ? -1 : 1;
+
             if (orderA.active) {
                 const stockA = checkStockReady(orderA);
                 const stockB = checkStockReady(orderB);
+                // Tier 0: 可完成优先
                 if (stockA !== stockB) return stockA ? -1 : 1;
+
                 const equipA = checkEquipmentReady(orderA);
                 const equipB = checkEquipmentReady(orderB);
+                // Tier 1 vs Tier 2: 可开始优先
                 if (equipA !== equipB) return equipA ? -1 : 1;
+
+                // --- 新增：Tier 内部按“剩余难度”排序 (低 -> 高) ---
+                // 只有当两者都不具备完成条件（或者都具备开始条件）时才比较难度
+                // 如果都可完成(stockReady)，其实 difficulty 都是 0，这里也不影响
+                const diffA = calculateOrderDifficulty(orderA, inventory);
+                const diffB = calculateOrderDifficulty(orderB, inventory);
+                if (diffA !== diffB) return diffA - diffB;
+                // ------------------------------------------------
             }
+
             return a.index - b.index;
         }).map(item => item.order);
-    }, [orders, editingOrderIds, checkStockReady, checkEquipmentReady, activeProtagonistFilter]);
+    }, [orders, editingOrderIds, checkStockReady, checkEquipmentReady, activeProtagonistFilter, inventory]);
 
     const handleFilterChange = (newVal: string | null) => {
         setActiveProtagonistFilter(newVal);
@@ -682,6 +701,8 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                         const isEditing = editingOrderIds.has(order.id);
                         const equipReady = checkEquipmentReady(order);
                         const stockReady = checkStockReady(order);
+                        const isFocused = activeOrderIds.includes(order.id);
+
                         return (
                             <div key={order.id} style={{
                                 border: order.active ? (stockReady ? '1px solid #81c784' : (equipReady ? '1px solid #90caf9' : '1px solid #ffcc80')) : '1px dashed #ccc',
@@ -726,21 +747,48 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                                         }}>
                                             {order.active ? '⏸️' : '▶️'}
                                         </button>
-                                        <button onClick={() => onArchiveOrder(order.id)} style={{
-                                            fontSize: 16,
-                                            width: 34,
-                                            height: 34,
-                                            cursor: 'pointer',
-                                            background: stockReady ? '#e8f5e9' : '#f5f5f5',
-                                            border: stockReady ? '1px solid #a5d6a7' : '1px solid #ddd',
-                                            borderRadius: 6,
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            opacity: stockReady ? 1 : 0.5
-                                        }}>
-                                            ✅
-                                        </button>
+                                        {stockReady ? (
+                                            <button onClick={() => onArchiveOrder(order.id)} style={{
+                                                fontSize: 16,
+                                                width: 34,
+                                                height: 34,
+                                                cursor: 'pointer',
+                                                background: stockReady ? '#e8f5e9' : '#f5f5f5',
+                                                border: stockReady ? '1px solid #a5d6a7' : '1px solid #ddd',
+                                                borderRadius: 6,
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                opacity: stockReady ? 1 : 0.5
+                                            }}>
+                                                ✅
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={() => {
+                                                    if (onFilterIntentChange) {
+                                                        if (isFocused) {
+                                                            // 已筛选 -> 取消 (显示全部)
+                                                            onFilterIntentChange({ type: 'all' });
+                                                        } else {
+                                                            // 未筛选 -> 筛选此订单
+                                                            onFilterIntentChange({ type: 'order', value: order.id });
+                                                        }
+                                                    }
+                                                }}
+                                                title={isFocused ? "取消筛选" : "在计划中只看此订单"}
+                                                style={{
+                                                    fontSize: 16, width: 34, height: 34, cursor: 'pointer',
+                                                    // 激活时深色高亮，未激活时浅色
+                                                    background: isFocused ? '#b3e5fc' : '#fff',
+                                                    border: isFocused ? '1px solid #039be5' : '1px solid #ddd',
+                                                    borderRadius: 6,
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                                }}
+                                            >
+                                                {isFocused ? '❌' : '🔍'}
+                                            </button>
+                                        )}
                                         <button onClick={() => onToggleEdit(order.id, !isEditing)} style={{
                                             fontSize: 16,
                                             width: 34,
@@ -828,6 +876,8 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                                                 if (!m) return null;
                                                 const currentStock = inventory[m.id] || 0;
                                                 const isEnough = currentStock >= i.count;
+                                                const rankStyle = getMushroomRankColor(m);
+
                                                 return (
                                                     <div key={i.mushroomId} style={{
                                                         display: 'flex',
@@ -836,11 +886,11 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                                                         background: order.active ? 'rgba(255,255,255,0.6)' : '#eee',
                                                         padding: '2px 8px',
                                                         borderRadius: 16,
-                                                        border: isEnough ? '1px solid rgba(0,0,0,0.05)' : '1px dashed #ffcc80',
+                                                        border: isEnough ? '1px solid rgba(0,0,0,0.05)' : `1px dashed ${rankStyle.color}`,
                                                         fontSize: 12
                                                     }}>
                                                         <MiniImg src={getMushroomImg(m.id)} size={20} circle/>
-                                                        <span style={{ color: '#555' }}>{m.name}</span>
+                                                        <span style={{ color: isEnough? '#555':rankStyle.color }}>{m.name}</span>
                                                         <span style={{
                                                             fontWeight: 'bold',
                                                             color: isEnough ? '#2e7d32' : '#e65100'

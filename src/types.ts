@@ -152,6 +152,6 @@ export interface GlobalStorage {
 
 // 新增：组件间筛选联动意图
 export interface FilterIntent {
-    type: 'all' | 'group';
+    type: 'all' | 'group' | 'order';
     value?: string; // 当 type 为 group 时，value 为组名
 }

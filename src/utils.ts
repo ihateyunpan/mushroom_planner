@@ -1,8 +1,15 @@
 // src/utils.ts
 import { HUMIDIFIER_INFO, LIGHT_INFO, WOOD_INFO } from './database';
 import type { MissingItem } from './logic';
-import type { HumidifierType, LightType, SpecialConditionType, WoodType } from './types';
-import { SpecialConditions } from './types';
+import {
+    type HumidifierType,
+    ItemRanks,
+    type LightType,
+    type MushroomDef,
+    SpecialConditions,
+    type SpecialConditionType,
+    type WoodType
+} from './types';
 
 export const getMushroomImg = (id: string) => `/mushrooms/${id}.webp`;
 
@@ -84,4 +91,55 @@ export function getEquipmentSortKey(type: 'wood' | 'light' | 'humidifier', value
     // Rank 2 (Zhen) -> 2000+
     // Rank 3 (Xian) -> 3000+
     return rank * 1000 + index;
+}
+
+const UNKNOWN_RANK_WEIGHT = 5;
+const RANK_WEIGHTS = {
+    [ItemRanks.FAN]: 1,
+    [ItemRanks.ZHEN]: 3,
+    [ItemRanks.XIAN]: 10, // 仙品很难，权重给高点
+};
+
+// 辅助：获取某个菌种的综合难度分
+export function getMushroomDifficultyScore(m: MushroomDef): number {
+    let finalWeight = 1;
+
+    const wRank = WOOD_INFO[m.wood as WoodType]?.rank;
+    const lRank = LIGHT_INFO[m.light as LightType]?.rank;
+    const hRank = HUMIDIFIER_INFO[m.humidifier as HumidifierType]?.rank;
+
+    if (wRank != null) {
+        finalWeight += RANK_WEIGHTS[wRank] ?? UNKNOWN_RANK_WEIGHT;
+    }
+    if (lRank != null) {
+        finalWeight += RANK_WEIGHTS[lRank] ?? UNKNOWN_RANK_WEIGHT;
+    }
+    if (hRank != null) {
+        finalWeight += RANK_WEIGHTS[hRank] ?? UNKNOWN_RANK_WEIGHT;
+    }
+
+
+    return finalWeight;
+}
+
+// 凡品(全1) -> 蓝; 珍品(含2无3) -> 紫; 仙品(含3) -> 黄
+export function getMushroomRankColor(m: MushroomDef) {
+    const ranks = [
+        m.wood ? WOOD_INFO[m.wood]?.rank : ItemRanks.FAN,
+        m.light ? LIGHT_INFO[m.light]?.rank : ItemRanks.FAN,
+        m.humidifier ? HUMIDIFIER_INFO[m.humidifier]?.rank : ItemRanks.FAN,
+    ].map(r => r || ItemRanks.FAN); // 默认凡品
+
+    const maxRank = Math.max(...ranks);
+
+    if (maxRank === ItemRanks.XIAN) {
+        // 仙品 - 黄色
+        return { background: '#fff9c4', border: '1px solid #fbc02d', color: '#f57f17' };
+    } else if (maxRank === ItemRanks.ZHEN) {
+        // 珍品 - 紫色
+        return { background: '#f3e5f5', border: '1px solid #ba68c8', color: '#7b1fa2' };
+    } else {
+        // 凡品 - 蓝色
+        return { background: '#e3f2fd', border: '1px solid #90caf9', color: '#1565c0' };
+    }
 }
