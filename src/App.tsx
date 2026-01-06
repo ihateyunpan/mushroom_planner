@@ -265,7 +265,7 @@ function App() {
 
         return {
             id: VIRTUAL_ORDER_ID,
-            name: '✨ 自动：图鉴补全计划',
+            name: '图鉴补全计划',
             items: uncollectedItems,
             active: isEncOrderActive
         };
@@ -615,14 +615,35 @@ function App() {
     };
 
     // --- Order CRUD Operations ---
-    const addOrder = (nameOverride?: string) => {
+    const addOrder = (nameOverride?: string, initialItems?: { mushroomId: string; count: number }[]) => {
+        // 如果有 nameOverride，使用它；否则使用 input 里的 newOrderName
         const finalName = nameOverride || newOrderName;
+
         if (!finalName.trim()) return;
+
         const newId = Date.now().toString();
 
-        setData(p => ({ ...p, orders: [{ id: newId, name: finalName, items: [], active: true }, ...p.orders] }));
+        setData(p => ({
+            ...p,
+            orders: [
+                {
+                    id: newId,
+                    name: finalName,
+                    // 使用传入的初始物品，如果没有则为空数组
+                    items: initialItems || [],
+                    active: true
+                },
+                ...p.orders
+            ]
+        }));
+
         setNewOrderName('');
-        setEditingOrderIds(p => new Set(p).add(newId));
+
+        // 只有当没有初始物品时（即创建空订单时），才自动展开编辑模式
+        // 如果是从“新建订单”面板创建并带有物品，通常不需要立即展开编辑
+        if (!initialItems || initialItems.length === 0) {
+            setEditingOrderIds(p => new Set(p).add(newId));
+        }
     };
     const addItemToOrder = (oid: string, mid: string) => setData(p => ({
         ...p,
