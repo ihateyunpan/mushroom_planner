@@ -262,14 +262,27 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
         const showEncycBadge = hasEncyclopediaCore || hasEncyclopediaPassenger;
         const isWeakEncycBadge = !hasEncyclopediaCore && hasEncyclopediaPassenger;
 
-        const timeWarningGroups: Record<string, { hasCore: boolean, hasPassenger: boolean }> = {};
-        batch.tasks.forEach(t => {
-            const key = `${t.mushroom.starter}-${t.mushroom.special || 'none'}`;
-            if (!timeWarningGroups[key]) timeWarningGroups[key] = { hasCore: false, hasPassenger: false };
-            if (t.isPassenger) timeWarningGroups[key].hasPassenger = true;
-            else timeWarningGroups[key].hasCore = true;
+        const showTimeWarning = batch.tasks.some(task => {
+            if (task.isPassenger) return false; // 只针对核心任务检查风险
+            const coreM = task.mushroom;
+
+            return MUSHROOM_DB.some(dbM => {
+                if (dbM.id === coreM.id) return false; // 排除自己
+                if (dbM.starter !== coreM.starter) return false; // 必须是同一种初始菌
+
+                // 检查环境兼容性 (Potential Hitchhiker Check)
+                // 1. 木头：批次木头是确定的，菌种必须匹配或通用
+                const woodMatch = dbM.wood === batch.env.wood;
+
+                // 2. 日照/补水/时间：批次可能是'任意'，如果是'任意'则视为兼容(因为可能随机到该环境)；如果是特定值则必须匹配
+                const lightMatch = batch.env.light === '任意' || !dbM.light || dbM.light === batch.env.light;
+                const humMatch = batch.env.humidifier === '任意' || !dbM.humidifier || dbM.humidifier === batch.env.humidifier;
+                const timeMatch = batch.env.time === '任意' || !dbM.time || dbM.time === batch.env.time;
+                const conditionMatch = dbM.special === coreM.special;
+
+                return woodMatch && lightMatch && humMatch && timeMatch && conditionMatch;
+            });
         });
-        const showTimeWarning = Object.values(timeWarningGroups).some(g => g.hasCore && g.hasPassenger);
 
         const coreTools: Record<string, number> = {};
         const passengerTools: Record<string, number> = {};
