@@ -1,6 +1,6 @@
 // src/App.tsx
 import React, { Suspense, useEffect, useMemo, useState } from 'react';
-import { MUSHROOM_DB } from './database';
+import { CORRECTED_NAMES, MUSHROOM_DB } from './database';
 import { calculateOptimalRoute, type PlanTask } from './logic';
 import type {
     ActionRecord,
@@ -27,7 +27,7 @@ import { RECENT_ID_COUNT } from "./utils.ts";
 
 // --- 优化：Lazy Loading 图鉴组件 ---
 const Encyclopedia = React.lazy(() =>
-    import('./components/Encyclopedia').then(module => ({default: module.Encyclopedia}))
+    import('./components/Encyclopedia').then(module => ({ default: module.Encyclopedia }))
 );
 
 // 1. 修改 SAFE_INITIAL_DATA，明确添加历史记录字段
@@ -61,7 +61,7 @@ const LoadingSpinner = () => (
         alignItems: 'center',
         gap: '10px'
     }}>
-        <div style={{fontSize: '24px'}}>🍄</div>
+        <div style={{ fontSize: '24px' }}>🍄</div>
         <div>正在加载图鉴...</div>
     </div>
 );
@@ -105,7 +105,7 @@ function App() {
                     }
                 }));
                 // V4 已有 recentIds
-                return {...parsed, recentIds: parsed.recentIds || []};
+                return { ...parsed, recentIds: parsed.recentIds || [] };
             }
 
             // 3. 向后兼容 V3 -> V5
@@ -122,7 +122,7 @@ function App() {
                         importHistory: []
                     }
                 }));
-                return {...parsed, recentIds: parsed.recentIds || []};
+                return { ...parsed, recentIds: parsed.recentIds || [] };
             }
 
             // 4. 向后兼容 V2 -> V5
@@ -139,7 +139,7 @@ function App() {
                         importHistory: []
                     }
                 }));
-                return {...parsed, recentIds: []};
+                return { ...parsed, recentIds: [] };
             }
 
             // 5. 尝试读取更早的 V1 数据
@@ -148,7 +148,7 @@ function App() {
                 const oldData = JSON.parse(savedOld);
                 return {
                     activeProfileId: 'default',
-                    profiles: [{id: 'default', name: '默认存档', data: {...SAFE_INITIAL_DATA, ...oldData}}],
+                    profiles: [{ id: 'default', name: '默认存档', data: { ...SAFE_INITIAL_DATA, ...oldData } }],
                     recentIds: []
                 };
             }
@@ -158,7 +158,7 @@ function App() {
         // 6. 默认初始化 (新用户)
         return {
             activeProfileId: 'default',
-            profiles: [{id: 'default', name: '默认存档', data: SAFE_INITIAL_DATA}],
+            profiles: [{ id: 'default', name: '默认存档', data: SAFE_INITIAL_DATA }],
             recentIds: []
         };
     });
@@ -196,7 +196,7 @@ function App() {
             const newItems = Array.isArray(ids) ? ids : [ids];
             const filteredPrev = currentRecents.filter(pid => !newItems.includes(pid));
             const updatedList = [...newItems, ...filteredPrev].slice(0, RECENT_ID_COUNT);
-            return {...prev, recentIds: updatedList};
+            return { ...prev, recentIds: updatedList };
         });
     };
 
@@ -237,7 +237,7 @@ function App() {
 
             return {
                 ...prev,
-                profiles: prev.profiles.map(p => p.id === activeId ? {...p, data: newData} : p)
+                profiles: prev.profiles.map(p => p.id === activeId ? { ...p, data: newData } : p)
             };
         });
     };
@@ -249,7 +249,7 @@ function App() {
             const newCount = Math.max(0, current + delta);
             return {
                 ...prev,
-                growing: {...(prev.growing || {}), [id]: newCount}
+                growing: { ...(prev.growing || {}), [id]: newCount }
             };
         });
     };
@@ -259,7 +259,7 @@ function App() {
         const collectedSet = new Set(data.collectedMushrooms || []);
         const uncollectedItems = MUSHROOM_DB
             .filter(m => !collectedSet.has(m.id))
-            .map(m => ({mushroomId: m.id, count: 1}));
+            .map(m => ({ mushroomId: m.id, count: 1 }));
 
         if (uncollectedItems.length === 0) return null;
 
@@ -276,9 +276,9 @@ function App() {
     // 添加操作历史
     const addActionHistory = (id: string, type: 'collect' | 'uncollect') => {
         setData(prev => {
-            const newRecord: ActionRecord = {mushroomId: id, type, timestamp: Date.now()};
+            const newRecord: ActionRecord = { mushroomId: id, type, timestamp: Date.now() };
             const currentHistory = prev.actionHistory || [];
-            return {...prev, actionHistory: [newRecord, ...currentHistory].slice(0, 10)};
+            return { ...prev, actionHistory: [newRecord, ...currentHistory].slice(0, 10) };
         });
     };
 
@@ -322,7 +322,7 @@ function App() {
 
             const newHistory = (prev.actionHistory || []).filter(r => r !== record);
 
-            return {...prev, collectedMushrooms: newList, actionHistory: newHistory};
+            return { ...prev, collectedMushrooms: newList, actionHistory: newHistory };
         });
     };
 
@@ -333,6 +333,9 @@ function App() {
         const unrecognizedLines: string[] = [];
 
         lines.forEach(line => {
+            if (CORRECTED_NAMES[line] != null) {
+                line = CORRECTED_NAMES[line];
+            }
             const m = MUSHROOM_DB.find(db => db.name === line);
             if (m) {
                 recognizedIds.add(m.id);
@@ -430,7 +433,7 @@ function App() {
                 }
             });
             if (!hasChange) return prev;
-            return {...prev, collectedMushrooms: Array.from(currentSet)};
+            return { ...prev, collectedMushrooms: Array.from(currentSet) };
         });
     };
 
@@ -466,19 +469,19 @@ function App() {
     };
 
     const handleSwitchProfile = (id: string) => {
-        setGlobalData(prev => ({...prev, activeProfileId: id}));
+        setGlobalData(prev => ({ ...prev, activeProfileId: id }));
         setEditingOrderIds(new Set());
     };
 
     const handleRenameProfile = (id: string, newName: string) => {
         setGlobalData(prev => ({
             ...prev,
-            profiles: prev.profiles.map(p => p.id === id ? {...p, name: newName} : p)
+            profiles: prev.profiles.map(p => p.id === id ? { ...p, name: newName } : p)
         }));
     };
 
     const handleExportCurrent = () => {
-        const blob = new Blob([JSON.stringify(data)], {type: 'application/json'});
+        const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
         a.download = `mushroom_profile_${currentProfile.name}.json`;
@@ -539,13 +542,13 @@ function App() {
 
     const updateInventory = (id: string, count: number) => setData(p => ({
         ...p,
-        inventory: {...p.inventory, [id]: Math.max(0, count)}
+        inventory: { ...p.inventory, [id]: Math.max(0, count) }
     }));
 
     const handleAddOne = (id: string) => {
         setData(p => ({
             ...p,
-            inventory: {...p.inventory, [id]: (p.inventory[id] || 0) + 1}
+            inventory: { ...p.inventory, [id]: (p.inventory[id] || 0) + 1 }
         }));
     };
 
@@ -553,18 +556,18 @@ function App() {
         setData(prev => {
             const mapKey = type === 'wood' ? 'unlockedWoods' : type === 'light' ? 'unlockedLights' : 'unlockedHumidifiers';
             const list = prev[mapKey] as string[];
-            if (list.includes(value)) return {...prev, [mapKey]: list.filter(x => x !== value)};
-            return {...prev, [mapKey]: [...list, value]};
+            if (list.includes(value)) return { ...prev, [mapKey]: list.filter(x => x !== value) };
+            return { ...prev, [mapKey]: [...list, value] };
         });
     };
 
     const handleCompleteTask = (task: PlanTask) => {
         if (window.confirm(`确认收取 ${task.countNeeded} 个 ${task.mushroom.name} 吗？\n\n(确认后将更新库存，该任务将因需求满足而从计划中移除)`)) {
             setData(prev => {
-                const newInventory = {...prev.inventory};
+                const newInventory = { ...prev.inventory };
                 const current = newInventory[task.mushroom.id] || 0;
                 newInventory[task.mushroom.id] = current + task.countNeeded;
-                return {...prev, inventory: newInventory};
+                return { ...prev, inventory: newInventory };
             });
         }
     };
@@ -603,7 +606,7 @@ function App() {
     };
 
     const handleExport = () => {
-        const blob = new Blob([JSON.stringify(globalData)], {type: 'application/json'});
+        const blob = new Blob([JSON.stringify(globalData)], { type: 'application/json' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
         const date = new Date().toISOString().split('T')[0];
@@ -617,7 +620,7 @@ function App() {
         if (!finalName.trim()) return;
         const newId = Date.now().toString();
 
-        setData(p => ({...p, orders: [{id: newId, name: finalName, items: [], active: true}, ...p.orders]}));
+        setData(p => ({ ...p, orders: [{ id: newId, name: finalName, items: [], active: true }, ...p.orders] }));
         setNewOrderName('');
         setEditingOrderIds(p => new Set(p).add(newId));
     };
@@ -628,19 +631,19 @@ function App() {
             items: o.items.some(i => i.mushroomId === mid) ? o.items.map(i => i.mushroomId === mid ? {
                 ...i,
                 count: i.count + 1
-            } : i) : [...o.items, {mushroomId: mid, count: 1}]
+            } : i) : [...o.items, { mushroomId: mid, count: 1 }]
         } : o)
     }));
     const updateItemCount = (oid: string, mid: string, count: number) => setData(p => ({
         ...p,
         orders: p.orders.map(o => o.id === oid ? {
             ...o,
-            items: o.items.map(i => i.mushroomId === mid ? {...i, count: Math.max(0, count)} : i)
+            items: o.items.map(i => i.mushroomId === mid ? { ...i, count: Math.max(0, count) } : i)
         } : o)
     }));
     const removeItemFromOrder = (oid: string, mid: string) => setData(p => ({
         ...p,
-        orders: p.orders.map(o => o.id === oid ? {...o, items: o.items.filter(i => i.mushroomId !== mid)} : o)
+        orders: p.orders.map(o => o.id === oid ? { ...o, items: o.items.filter(i => i.mushroomId !== mid) } : o)
     }));
     const toggleOrderEdit = (oid: string, isEditing: boolean) => setEditingOrderIds(p => {
         const n = new Set(p);
@@ -656,7 +659,7 @@ function App() {
     };
     const toggleOrderActive = (oid: string) => setData(p => ({
         ...p,
-        orders: p.orders.map(o => o.id === oid ? {...o, active: !o.active} : o)
+        orders: p.orders.map(o => o.id === oid ? { ...o, active: !o.active } : o)
     }));
 
     const handleArchiveOrder = (oid: string) => {
@@ -678,7 +681,7 @@ function App() {
 
         if (window.confirm(confirmMsg)) {
             setData(prev => {
-                const newInv = {...prev.inventory};
+                const newInv = { ...prev.inventory };
                 order.items.forEach(item => {
                     const current = newInv[item.mushroomId] || 0;
                     newInv[item.mushroomId] = Math.max(0, current - item.count);
@@ -805,7 +808,7 @@ function App() {
                 </Suspense>
             ) : (
                 <div className="main-layout">
-                    <div style={{display: 'flex', flexDirection: 'column', gap: 10}}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                         <div id="panel-equipment">
                             <EquipmentPanel unlockedWoods={data.unlockedWoods as WoodType[]}
                                             unlockedLights={data.unlockedLights as LightType[]}
