@@ -3,7 +3,7 @@ import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { MUSHROOM_CHILDREN, MUSHROOM_DB } from '../database';
 import type { ActionRecord, HumidifierType, ImportRecord, LightType, MushroomDef, WoodType } from '../types';
 import { Humidifiers, Lights, MushroomChildIds, SpecialConditions, TimeRanges, Woods } from '../types';
-import { getChildImg, getMushroomImg, TOOL_INFO } from '../utils';
+import { getChildImg, getEquipmentSortKey, getMushroomImg, TOOL_INFO } from '../utils';
 import { CollapsibleSection, EnvBadge, MiniImg } from './Common';
 
 // --- 辅助函数 ---
@@ -99,7 +99,9 @@ const QuickCheckModal: React.FC<{
 }> = ({ onClose, onToggle, collectedIds }) => {
     // 获取按 ingameIndex 排序的列表
     const sortedList = useMemo(() => {
-        return [...MUSHROOM_DB].sort((a, b) => (a.ingameIndex || 9999) - (b.ingameIndex || 9999));
+        return [...MUSHROOM_DB].sort((a, b) => {
+            return (a.ingameIndex ?? 9999) - (b.ingameIndex ?? 9999)
+        });
     }, []);
 
     return (
@@ -530,7 +532,6 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
                                                           }) => {
     // Refs
     const topRef = useRef<HTMLDivElement>(null);
-    const collectedStartRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const [modalRecord, setModalRecord] = useState<ImportRecord | null>(null);
@@ -601,33 +602,40 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
     // --- 排序逻辑 ---
     const sortedDisplayList = useMemo(() => {
         return [...filteredList].sort((a, b) => {
-            const isACollected = collectedIds.includes(a.id);
-            const isBCollected = collectedIds.includes(b.id);
+            // 0. 新增优先级：【未收集】且【(有库存 或 培育中)】 -> 排在最前
+            // 这样方便用户快速找到可以“点亮”或“正在做”的菌种
+            const isUncollectedA = !collectedIds.includes(a.id);
+            const isUncollectedB = !collectedIds.includes(b.id);
 
-            if (isACollected !== isBCollected) return isACollected ? 1 : -1;
+            const hasActionA = (inventory[a.id] || 0) > 0 || (growingCounts[a.id] || 0) > 0;
+            const hasActionB = (inventory[b.id] || 0) > 0 || (growingCounts[b.id] || 0) > 0;
 
-            if (!isACollected) {
-                const stockA = (inventory[a.id] || 0) > 0;
-                const stockB = (inventory[b.id] || 0) > 0;
-                const growingA = (growingCounts[a.id] || 0) > 0;
-                const growingB = (growingCounts[b.id] || 0) > 0;
+            const priorityA = isUncollectedA && hasActionA;
+            const priorityB = isUncollectedB && hasActionB;
 
-                const getScore = (hasStock: boolean, isGrowing: boolean) => {
-                    if (hasStock) return 3;
-                    if (isGrowing) return 2;
-                    return 1;
-                };
-
-                const scoreA = getScore(stockA, growingA);
-                const scoreB = getScore(stockB, growingB);
-
-                if (scoreA !== scoreB) return scoreB - scoreA;
-
-                const strictA = getStrictnessScore(a);
-                const strictB = getStrictnessScore(b);
-                if (strictA !== strictB) return strictB - strictA;
+            if (priorityA !== priorityB) {
+                return priorityA ? -1 : 1; // 有优先级的排前面
             }
 
+            // 1. 严格度优先 (高 -> 低)
+            const strictA = getStrictnessScore(a);
+            const strictB = getStrictnessScore(b);
+            if (strictA !== strictB) return strictB - strictA;
+
+            // 2. 按设备排序 (木头 -> 日照 -> 补水) (品级+Index 低 -> 高)
+            const wA = getEquipmentSortKey('wood', a.wood || '任意');
+            const wB = getEquipmentSortKey('wood', b.wood || '任意');
+            if (wA !== wB) return wA - wB;
+
+            const lA = getEquipmentSortKey('light', a.light || '任意');
+            const lB = getEquipmentSortKey('light', b.light || '任意');
+            if (lA !== lB) return lA - lB;
+
+            const hA = getEquipmentSortKey('humidifier', a.humidifier || '任意');
+            const hB = getEquipmentSortKey('humidifier', b.humidifier || '任意');
+            if (hA !== hB) return hA - hB;
+
+            // 3. 最后按默认顺序
             return MUSHROOM_DB.indexOf(a) - MUSHROOM_DB.indexOf(b);
         });
     }, [filteredList, collectedIds, inventory, growingCounts]);
@@ -668,7 +676,6 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
         }
     };
 
-    const hasCollectedInView = sortedDisplayList.some(m => collectedIds.includes(m.id));
     const selectStyle = { padding: '6px', borderRadius: 4, border: '1px solid #ccc', fontSize: 13, minWidth: 100 };
 
     const totalCollected = collectedIds.length;
@@ -680,7 +687,6 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
     const currentListUncollected = currentListTotal - currentListCollected;
 
     const scrollToTop = () => topRef.current?.scrollIntoView({ behavior: 'smooth' });
-    const scrollToCollected = () => collectedStartRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
     return (
         <div ref={topRef} style={{ paddingBottom: 80, position: 'relative' }}>
@@ -1117,29 +1123,11 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
             <div style={{
                 display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 15, marginTop: 15
             }}>
-                {sortedDisplayList.map((m, idx) => {
+                {sortedDisplayList.map((m) => {
                     const isCollected = collectedIds.includes(m.id);
-                    const prevIsCollected = idx > 0 ? collectedIds.includes(sortedDisplayList[idx - 1].id) : false;
-                    const showSeparator = isCollected && (idx === 0 || !prevIsCollected);
-
+                    // --- 移除分隔线逻辑 ---
                     return (
                         <React.Fragment key={m.id}>
-                            {showSeparator && (
-                                <div ref={collectedStartRef} style={{
-                                    gridColumn: '1 / -1',
-                                    marginTop: 20,
-                                    marginBottom: 10,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 10,
-                                    color: '#81c784',
-                                    fontSize: 14,
-                                    fontWeight: 'bold'
-                                }}>
-                                    <span>⬇️ 已收集部分</span>
-                                    <div style={{ flex: 1, height: 2, background: '#e8f5e9' }}></div>
-                                </div>
-                            )}
                             <MushroomCardItem
                                 m={m}
                                 isCollected={isCollected}
@@ -1161,11 +1149,11 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
                 }}>没有符合条件的菌种</div>}
             </div>
 
-            {/* 悬浮球 */}
+            {/* 悬浮球 (只保留回到顶部) */}
             <div style={{
-                position: 'fixed', bottom: 30, right: 20, zIndex: 100, display: 'flex', flexDirection: 'column', gap: 12
+                position: 'fixed', bottom: 30, right: 20, zIndex: 100
             }}>
-                <button onClick={scrollToTop} title="回到未收集/顶部" style={{
+                <button onClick={scrollToTop} title="回到顶部" style={{
                     width: 48,
                     height: 48,
                     borderRadius: '50%',
@@ -1180,22 +1168,6 @@ export const Encyclopedia: React.FC<EncyclopediaProps> = ({
                     justifyContent: 'center'
                 }}>⬆️
                 </button>
-                {hasCollectedInView && (
-                    <button onClick={scrollToCollected} title="跳到已收集部分" style={{
-                        width: 48,
-                        height: 48,
-                        borderRadius: '50%',
-                        background: '#e8f5e9',
-                        border: '2px solid #81c784',
-                        color: '#2e7d32',
-                        fontSize: 20,
-                        boxShadow: '0 4px 10px rgba(76, 175, 80, 0.2)',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                    }}>⬇️</button>
-                )}
             </div>
         </div>
     );
