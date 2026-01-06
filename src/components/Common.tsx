@@ -323,7 +323,7 @@ export const MushroomInfoCard: React.FC<{ m: MushroomDef }> = ({m}) => {
                                         )}
                                     </div>
                                 ) : (
-                                    <span style={{color: '#c62828', fontWeight: 'bold'}}>❌ 不救 (变异)</span>
+                                    <span style={{color: '#c62828', fontWeight: 'bold'}}>❌ 不救</span>
                                 )}
                             </div>
                         );

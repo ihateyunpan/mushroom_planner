@@ -44,7 +44,7 @@ export const TOOL_INFO: Record<string, { name: string; img: string }> = {
 export const getSpecialStyle = (special: string) => {
     switch (special) {
         case SpecialConditions.BUG:
-            return { bg: '#ffebee', color: '#c62828', icon: '🐛', border: '#ffcdd2' }; // 红：虫害
+            return { bg: '#ffebee', color: '#c62828', icon: '☠️', border: '#ffcdd2' }; // 红：虫害
         case SpecialConditions.LESS:
             return { bg: '#e3f2fd', color: '#1565c0', icon: '🥀', border: '#bbdefb' }; // 蓝：营养不良
         case SpecialConditions.MUCH:

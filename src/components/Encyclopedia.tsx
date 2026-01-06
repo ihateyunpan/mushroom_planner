@@ -20,7 +20,7 @@ const getStrictnessScore = (m: { wood?: string, light?: string, humidifier?: str
 const getSpecialStyle = (special: string) => {
     switch (special) {
         case SpecialConditions.BUG:
-            return { bg: '#ffebee', color: '#c62828', icon: '🐛', border: '#ffcdd2' };
+            return { bg: '#ffebee', color: '#c62828', icon: '☠️', border: '#ffcdd2' };
         case SpecialConditions.LESS:
             return { bg: '#e3f2fd', color: '#1565c0', icon: '🥀', border: '#bbdefb' };
         case SpecialConditions.MUCH:
@@ -324,8 +324,15 @@ const MushroomCardItem: React.FC<{
                         const style = getSpecialStyle(m.special);
                         return (
                             <div style={{
-                                marginTop: 4, background: style.bg, padding: '6px 8px', borderRadius: 6,
-                                border: `1px solid ${style.border}`, display: 'flex', flexDirection: 'column', gap: 4
+                                marginTop: 4,
+                                background: style.bg,
+                                padding: '6px 8px',
+                                borderRadius: 6,
+                                border: `1px solid ${style.border}`,
+                                display: 'flex',
+                                alignItems: 'center',        // 垂直居中
+                                justifyContent: 'space-between', // 两端对齐，让"特殊情况"靠左，"策略"靠右
+                                gap: 4
                             }}>
                                 <div style={{
                                     color: style.color,
@@ -337,7 +344,6 @@ const MushroomCardItem: React.FC<{
                                     <span>{style.icon}</span>{m.special}
                                 </div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                    <span style={{ color: '#666' }}>策略:</span>
                                     {m.save ? (
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                                             <span style={{ color: '#2e7d32', fontWeight: 'bold' }}>✅ 救助</span>
@@ -357,7 +363,7 @@ const MushroomCardItem: React.FC<{
                                             )}
                                         </div>
                                     ) : (
-                                        <span style={{ color: '#c62828', fontWeight: 'bold' }}>❌ 不救 (变异)</span>
+                                        <span style={{ color: '#c62828', fontWeight: 'bold' }}>❌ 不救</span>
                                     )}
                                 </div>
                             </div>

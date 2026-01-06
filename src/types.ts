@@ -67,7 +67,7 @@ export type TimeType = typeof TimeRanges[keyof typeof TimeRanges];
 export const SpecialConditions = {
     MUCH: '营养过剩',
     LESS: '营养不良',
-    BUG: '虫害'
+    BUG: '生病'
 } as const;
 export type SpecialConditionType = typeof SpecialConditions[keyof typeof SpecialConditions];
 
