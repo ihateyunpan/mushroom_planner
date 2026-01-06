@@ -15,9 +15,6 @@ export const getChildImg = (id: string, special: SpecialConditionType | undefine
         case SpecialConditions.MUCH:
             specialCode = '2';
             break;
-        case SpecialConditions.BUG:
-            specialCode = '3';
-            break;
         default:
             specialCode = '';
     }

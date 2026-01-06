@@ -257,8 +257,21 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
             }
         });
 
-        const diseaseGroups: Record<string, PlanTask[]> = { 'healthy': [], 'less': [], 'much': [], 'bug': [] };
+        const diseaseGroups: Record<string, PlanTask[]> = {
+            'healthy': [],
+            'less': [],
+            'much': [],
+            'bug': [],
+            'unsaved': [] // 新增
+        };
+
         batch.tasks.forEach(task => {
+            // 优先检查 save=false
+            if (task.mushroom.save === false) {
+                diseaseGroups['unsaved'].push(task);
+                return;
+            }
+
             const sp = task.mushroom.special;
             if (!sp) diseaseGroups['healthy'].push(task);
             else if (sp === SpecialConditions.LESS) diseaseGroups['less'].push(task);
@@ -575,25 +588,54 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                             marginBottom: 8
                         }}>⚠️ 核心目标幼菌生长时间更长，请务必注意区分，避免收获错误品种！</div>}
 
-                        {['healthy', 'less', 'much', 'bug'].map(key => {
+                        {['healthy', 'less', 'much', 'bug', 'unsaved'].map(key => {
                             const tasks = diseaseGroups[key];
                             if (tasks.length === 0) return null;
-                            const color = key === 'healthy' ? '#2e7d32' : key === 'less' ? '#1565c0' : key === 'much' ? '#6a1b9a' : '#c62828';
-                            const label = key === 'healthy' ? '💚 健康' : key === 'less' ? '🥀 需不良' : key === 'much' ? '💊 需过剩' : '🐛 需生虫';
 
-                            // 仅针对需要救助的情况（不良/过剩）显示操作按钮
-                            const canRescue = key === 'less' || key === 'much';
+                            let color = '';
+                            let label = '';
+                            let showRescueBtn = false; // 控制是否显示 -1 按钮
+
+                            switch (key) {
+                                case 'healthy':
+                                    color = '#2e7d32';
+                                    label = '💚 健康';
+                                    break;
+                                case 'less':
+                                    color = '#1565c0';
+                                    label = '🥀 需不良';
+                                    showRescueBtn = true;
+                                    break;
+                                case 'much':
+                                    color = '#6a1b9a';
+                                    label = '💊 需过剩';
+                                    showRescueBtn = true;
+                                    break;
+                                case 'bug':
+                                    color = '#c62828';
+                                    label = '🐛 需生虫';
+                                    break;
+                                case 'unsaved':
+                                    color = '#795548';
+                                    label = '☠️ 需生病（且不救）';
+                                    showRescueBtn = true; // Feature 2: 允许 -1
+                                    break;
+                            }
 
                             return (
                                 <div key={key}
                                      style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                                    <span style={{ fontWeight: 'bold', color, width: 60 }}>{label}:</span>
+                                    {/* 特殊处理 unsaved 的标签宽度 */}
+                                    <span style={{
+                                        fontWeight: 'bold',
+                                        color,
+                                        width: key === 'unsaved' ? 'auto' : 60,
+                                        marginRight: key === 'unsaved' ? 6 : 0
+                                    }}>{label}:</span>
+
                                     {aggregateTasks(tasks).map((t, i) => {
-                                        // 计算扣除“培育中”后的剩余需求
                                         const growing = growingCounts[t.targetId] || 0;
                                         const remainingNeeded = Math.max(0, t.count - growing);
-
-                                        // 如果全部都在培育中，可以降低透明度或变灰
                                         const isAllCovered = remainingNeeded === 0;
 
                                         return (
@@ -607,7 +649,6 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                 borderRadius: 4,
                                                 opacity: isAllCovered ? 0.5 : (t.isPassenger ? 0.7 : 1)
                                             }}>
-                                                {/* 修改：给 MiniImg 加个容器以定位红点 */}
                                                 <div style={{ position: 'relative' }}>
                                                     <MiniImg
                                                         src={getChildImg(t.starter, t.special as (SpecialConditionType | undefined))}
@@ -616,14 +657,9 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                     {t.hasUncollected && (
                                                         <div style={{
                                                             position: 'absolute',
-                                                            top: -2,
-                                                            right: -2,
-                                                            width: 8,
-                                                            height: 8,
-                                                            borderRadius: '50%',
-                                                            background: '#ff3d00',
-                                                            border: '1px solid #fff',
-                                                            zIndex: 1
+                                                            top: -2, right: -2, width: 8, height: 8,
+                                                            borderRadius: '50%', background: '#ff3d00',
+                                                            border: '1px solid #fff', zIndex: 1
                                                         }} title="该需求包含未收集的新菌种"/>
                                                     )}
                                                 </div>
@@ -631,7 +667,6 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                 <span>{MUSHROOM_CHILDREN[t.starter as MushroomChildId]}</span>
                                                 <span style={{ fontWeight: 'bold', color, marginLeft: 2 }}>
                                                     x{remainingNeeded}
-                                                    {/* 如果有正在培育的，显示总数提示 */}
                                                     {growing > 0 && <span style={{
                                                         fontSize: 10,
                                                         color: '#999',
@@ -639,11 +674,11 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                     }}> (总{t.count})</span>}
                                                 </span>
 
-                                                {/* 橙色 -1 按钮 */}
-                                                {canRescue && remainingNeeded > 0 && (
+                                                {/* 显示 -1 按钮 */}
+                                                {showRescueBtn && remainingNeeded > 0 && (
                                                     <button
                                                         onClick={(e) => {
-                                                            e.stopPropagation(); // 防止折叠面板误触
+                                                            e.stopPropagation();
                                                             onUpdateGrowing(t.targetId, 1);
                                                         }}
                                                         title="标记一个为培育中 (库存+1)"

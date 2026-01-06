@@ -196,6 +196,30 @@ export function calculateOptimalRoute(userData: UserSaveData): CalculationResult
         });
     });
 
+    // 将订单中 save=false 的菌种添加到所有『初始菌种中含有与之相同的初始菌种』的批次
+    const unsavedNeeds = needToPlant.filter(item => item.mushroom.save === false);
+
+    if (unsavedNeeds.length > 0) {
+        batches.forEach(batch => {
+            // 获取当前批次包含的所有初始菌种类型
+            const startersInBatch = new Set(batch.tasks.map(t => t.mushroom.starter));
+
+            unsavedNeeds.forEach(need => {
+                if (startersInBatch.has(need.mushroom.starter)) {
+                    // 如果批次里还没有这个任务（无论是核心还是蹭车），则添加
+                    const exists = batch.tasks.some(t => t.mushroom.id === need.mushroom.id);
+                    if (!exists) {
+                        batch.tasks.push({
+                            ...need,
+                            isPassenger: true, // 标记为蹭车
+                            // originalBatchId 可以留空
+                        });
+                    }
+                }
+            });
+        });
+    }
+
     // 5. 排序
     batches.sort((a, b) => {
         // 1. 严格度优先 (高 -> 低)
