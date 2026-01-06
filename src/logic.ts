@@ -1,6 +1,7 @@
 // src/logic.ts
 import { MUSHROOM_DB } from './database';
 import type { HumidifierType, LightType, MushroomDef, TimeType, UserSaveData, WoodType } from './types';
+import { getEquipmentSortKey } from './utils';
 
 // 缺失物品的结构化定义
 export interface MissingItem {
@@ -55,11 +56,11 @@ export function calculateOptimalRoute(userData: UserSaveData): CalculationResult
         const netNeeded = totalNeeded - inStock;
         if (netNeeded > 0) {
             const def = MUSHROOM_DB.find(m => m.id === id);
-            if (def) needToPlant.push({mushroom: def, countNeeded: netNeeded});
+            if (def) needToPlant.push({ mushroom: def, countNeeded: netNeeded });
         }
     });
 
-    if (needToPlant.length === 0) return {batches: [], missingSummary: []};
+    if (needToPlant.length === 0) return { batches: [], missingSummary: [] };
 
     // 排序：限制多的优先
     needToPlant.sort((a, b) => {
@@ -109,10 +110,10 @@ export function calculateOptimalRoute(userData: UserSaveData): CalculationResult
 
             if (bestBatchIndex !== -1) {
                 const batch = batches[bestBatchIndex];
-                batch.tasks.push({...currentItem, isPassenger: false});
+                batch.tasks.push({ ...currentItem, isPassenger: false });
                 batch.totalCount += currentItem.countNeeded;
             } else {
-                // 修改点：生成稳定的ID
+                // 生成稳定的ID
                 const envId = [
                     currentWood,
                     currentItem.mushroom.light || '任意',
@@ -128,7 +129,7 @@ export function calculateOptimalRoute(userData: UserSaveData): CalculationResult
                         humidifier: currentItem.mushroom.humidifier || '任意',
                         time: currentItem.mushroom.time || '任意',
                     },
-                    tasks: [{...currentItem, isPassenger: false}],
+                    tasks: [{ ...currentItem, isPassenger: false }],
                     missingEquipment: [],
                     strictnessScore: 0,
                     totalCount: currentItem.countNeeded
@@ -150,17 +151,17 @@ export function calculateOptimalRoute(userData: UserSaveData): CalculationResult
 
         // 缺失设备逻辑
         if (!userData.unlockedWoods.includes(batch.env.wood)) {
-            const item: MissingItem = {type: 'wood', value: batch.env.wood};
+            const item: MissingItem = { type: 'wood', value: batch.env.wood };
             allMissingMap.set(`wood-${batch.env.wood}`, item);
             batch.missingEquipment.push(item);
         }
         if (batch.env.light !== '任意' && !userData.unlockedLights.includes(batch.env.light)) {
-            const item: MissingItem = {type: 'light', value: batch.env.light};
+            const item: MissingItem = { type: 'light', value: batch.env.light };
             allMissingMap.set(`light-${batch.env.light}`, item);
             batch.missingEquipment.push(item);
         }
         if (batch.env.humidifier !== '任意' && !userData.unlockedHumidifiers.includes(batch.env.humidifier)) {
-            const item: MissingItem = {type: 'humidifier', value: batch.env.humidifier};
+            const item: MissingItem = { type: 'humidifier', value: batch.env.humidifier };
             allMissingMap.set(`humidifier-${batch.env.humidifier}`, item);
             batch.missingEquipment.push(item);
         }
@@ -206,11 +207,24 @@ export function calculateOptimalRoute(userData: UserSaveData): CalculationResult
         const aIsComplete = a.missingEquipment.length === 0;
         const bIsComplete = b.missingEquipment.length === 0;
         if (aIsComplete !== bIsComplete) {
-            // true (可完成) 排在 false (缺道具) 前面
             return aIsComplete ? -1 : 1;
         }
 
-        // 3. 数量优先 (多 -> 少)
+        // 3. 按设备排序 (木头 -> 日照 -> 补水)
+        // 使用 getEquipmentSortKey (品级优先, 然后索引)
+        const wA = getEquipmentSortKey('wood', a.env.wood);
+        const wB = getEquipmentSortKey('wood', b.env.wood);
+        if (wA !== wB) return wA - wB;
+
+        const lA = getEquipmentSortKey('light', a.env.light);
+        const lB = getEquipmentSortKey('light', b.env.light);
+        if (lA !== lB) return lA - lB;
+
+        const hA = getEquipmentSortKey('humidifier', a.env.humidifier);
+        const hB = getEquipmentSortKey('humidifier', b.env.humidifier);
+        if (hA !== hB) return hA - hB;
+
+        // 4. 数量优先 (多 -> 少)
         return b.totalCount - a.totalCount;
     });
 

@@ -2,6 +2,7 @@
 import {
     Humidifiers,
     type HumidifierType,
+    ItemRanks,
     Lights,
     type LightType,
     type MushroomChildId,
@@ -33,40 +34,40 @@ export const MUSHROOM_CHILDREN: Record<MushroomChildId, string> = {
 }
 
 
-// --- 新增：道具详情信息 (来源) ---
+// --- 新增：道具详情信息 (来源 + 品级) ---
 
-export const WOOD_INFO: Record<WoodType, { source: string }> = {
-    [Woods.BAI]: {source: '1级'},
-    [Woods.FENG]: {source: '商店出现'},
-    [Woods.SONG]: {source: '6级'},
-    [Woods.CHANG_CHUN]: {source: '7级'},
-    [Woods.GE_TENG]: {source: '9级'},
-    [Woods.JIAN_CI]: {source: '10级'},
-    [Woods.JIAN_JING]: {source: '12级'},
-    [Woods.LV_SONG]: {source: '13级'},
-    [Woods.GOLD]: {source: '15级'},
-    [Woods.LOVE]: {source: '白龙1'},
-    [Woods.QIAN_NIU]: {source: '白龙1'},
-    [Woods.QING]: {source: '白龙2'},
-    [Woods.YAN]: {source: '白龙2'},
-    [Woods.MING]: {source: '白龙3'},
-    [Woods.SHU]: {source: '白龙3'},
+export const WOOD_INFO: Record<WoodType, { source: string; rank: number }> = {
+    [Woods.BAI]: { source: '1级', rank: ItemRanks.FAN },
+    [Woods.FENG]: { source: '商店出现', rank: ItemRanks.FAN },
+    [Woods.SONG]: { source: '6级', rank: ItemRanks.FAN },
+    [Woods.CHANG_CHUN]: { source: '7级', rank: ItemRanks.FAN },
+    [Woods.GE_TENG]: { source: '9级', rank: ItemRanks.ZHEN },
+    [Woods.JIAN_CI]: { source: '10级', rank: ItemRanks.ZHEN },
+    [Woods.JIAN_JING]: { source: '12级', rank: ItemRanks.XIAN },
+    [Woods.LV_SONG]: { source: '13级', rank: ItemRanks.XIAN },
+    [Woods.GOLD]: { source: '15级', rank: ItemRanks.XIAN },
+    [Woods.LOVE]: { source: '白龙1', rank: ItemRanks.ZHEN },
+    [Woods.QIAN_NIU]: { source: '白龙1', rank: ItemRanks.FAN },
+    [Woods.QING]: { source: '白龙2', rank: ItemRanks.ZHEN },
+    [Woods.YAN]: { source: '白龙2', rank: ItemRanks.ZHEN },
+    [Woods.MING]: { source: '白龙3', rank: ItemRanks.XIAN },
+    [Woods.SHU]: { source: '白龙3', rank: ItemRanks.XIAN },
 };
 
-export const LIGHT_INFO: Record<LightType, { source: string }> = {
-    [Lights.HUO]: {source: '2级'},
-    [Lights.HUN]: {source: '5级'},
-    [Lights.TONG]: {source: '11级'},
-    [Lights.YU_RONG]: {source: '白龙2'},
-    [Lights.DRAGON]: {source: '白龙3'},
+export const LIGHT_INFO: Record<LightType, { source: string; rank: number }> = {
+    [Lights.HUO]: { source: '2级', rank: ItemRanks.FAN },
+    [Lights.HUN]: { source: '5级', rank: ItemRanks.FAN },
+    [Lights.TONG]: { source: '11级', rank: ItemRanks.FAN },
+    [Lights.YU_RONG]: { source: '白龙2', rank: ItemRanks.ZHEN },
+    [Lights.DRAGON]: { source: '白龙3', rank: ItemRanks.XIAN },
 };
 
-export const HUMIDIFIER_INFO: Record<HumidifierType, { source: string }> = {
-    [Humidifiers.ZHU]: {source: '4级'},
-    [Humidifiers.LIAN]: {source: '8级'},
-    [Humidifiers.TAO]: {source: '14级'},
-    [Humidifiers.NIAO]: {source: '白龙1'},
-    [Humidifiers.BLUE]: {source: '白龙3'},
+export const HUMIDIFIER_INFO: Record<HumidifierType, { source: string; rank: number }> = {
+    [Humidifiers.ZHU]: { source: '4级', rank: ItemRanks.FAN },
+    [Humidifiers.LIAN]: { source: '8级', rank: ItemRanks.FAN },
+    [Humidifiers.TAO]: { source: '14级', rank: ItemRanks.FAN },
+    [Humidifiers.NIAO]: { source: '白龙1', rank: ItemRanks.ZHEN },
+    [Humidifiers.BLUE]: { source: '白龙3', rank: ItemRanks.XIAN },
 };
 
 const CI_MUSHROOMS: MushroomDef[] = [
@@ -3048,7 +3049,41 @@ const HOU_MUSHROOMS: MushroomDef[] = [
     },
 ];
 
-export const MUSHROOM_DB: MushroomDef[] = [
+// 游戏内图鉴顺序列表
+const INGAME_NAMES_ORDER = [
+    "适中蓝莓味竹荪", "巨型荷塘夜色地星菌", "小斑比草帽菌", "中等善良刺头菌", "小巧黄金喇叭菌", "超小型木桩鸟巢菌", "清淡猪肉味竹荪", "一般暗黑猫爪菌", "适中墨鱼丸味竹荪", "超小看破一切泡泡菌",
+    "袖珍善良刺头菌", "超级宅宅猴头菌", "巨巨寒冰刺头菌", "小巧超火爆喇叭菌", "常见菜色泡泡菌", "平凡笨蛋猴头菌", "平凡宅宅猴头菌", "浓厚猪肉味竹荪", "清淡番茄味竹荪", "中庸深渊鹿角菌",
+    "大型西凉菜菜菌", "路边朴素地星菌", "超大菜色泡泡菌", "迷你红温猫爪菌", "微小笨蛋猴头菌", "普通恶毒草帽菌", "小巧封心锁爱喇叭菌", "通常幽州菜菜菌", "一般傲娇猫爪菌", "超大过劳泡泡菌",
+    "超大看破一切泡泡菌", "普通斑比草帽菌", "特大陷阵营喇叭菌", "大型水平太菜菜菌", "超小新手泡泡菌", "寻常封心锁爱喇叭菌", "膨胀贾诩珊瑚菌", "庞大酥酪宝石菌", "迷你萌萌猫爪菌", "中庸素描鹿角菌",
+    "标准不可燃鸟巢菌", "大型幽州菜菜菌", "巨型黄花菜地星菌", "缩水公孙珊珊瑚菌", "平凡隐鸢阁冠名猴头菌", "大号一口见阿祖幽灵菌", "超级笨蛋猴头菌", "迷你傲娇猫爪菌", "适中莲藕味竹荪", "小只轻骑兵地星菌",
+    "大斑比草帽菌", "路边粉毛地星菌", "标准可燃鸟巢菌", "庞大番茄炒蛋宝石菌", "中庸蔫蔫鹿角菌", "袖珍太白金星刺头菌", "小号一口见阿祖幽灵菌", "微型素描鹿角菌", "常见过劳泡泡菌", "超大亚健康泡泡菌",
+    "普通健美草帽菌", "小小坏种宝石菌", "微小隐鸢阁冠名猴头菌", "寻常超火爆喇叭菌", "缩水张郃珊瑚菌", "中级戏学珊瑚菌", "巨体碧玉鹿角菌", "纤小滞销美灵芝", "巨巨善良刺头菌", "超大型厨余鸟巢菌",
+    "大健美草帽菌", "标准陶瓷鸟巢菌", "巨巨邪恶刺头菌", "巨大萌萌猫爪菌", "小只黄花菜地星菌", "小号幻象幽灵菌", "大号挑染幽灵菌", "清淡蓝莓味竹荪", "路边黄花菜地星菌", "中号蓝天白云幽灵菌",
+    "通常水平太菜菜菌", "常规躺板板宝石菌", "大恶毒草帽菌", "硕大苍白美灵芝", "微小宅宅猴头菌", "中等太白金星刺头菌", "小型幽州菜菜菌", "大老土草帽菌", "大号冰山幽灵菌", "微型碧玉鹿角菌",
+    "适中番茄味竹荪", "膨胀戏学珊瑚菌", "中号冰山幽灵菌", "小号蓝天白云幽灵菌", "中庸二刺螈鹿角菌", "寻常黄金喇叭菌", "通常椰椰菜菜菌", "巨大傲娇猫爪菌", "标准木桩鸟巢菌", "小小酥酪宝石菌",
+    "寻常阴湿美灵芝", "巨体素描鹿角菌", "浓厚蓝莓味竹荪", "小号暗黑幽灵菌", "适中猪肉味竹荪", "纤小阴湿美灵芝", "庞大躺板板宝石菌", "超小型可燃鸟巢菌", "超级逃课猴头菌", "路边荷塘夜色地星菌",
+    "巨巨魔法少女刺头菌", "小小番茄炒蛋宝石菌", "小型西凉菜菜菌", "硕大潮人美灵芝", "微型应援棒鹿角菌", "巨体深渊鹿角菌", "小健美草帽菌", "中等魔法少女刺头菌", "一般萌萌猫爪菌", "超大新手泡泡菌",
+    "巨型轻骑兵地星菌", "标准五彩豆鸟巢菌", "超大型可燃鸟巢菌", "特大青春痘喇叭菌", "超小亚健康泡泡菌", "常见新手泡泡菌", "常见实习泡泡菌", "小只荷塘夜色地星菌", "小老土草帽菌", "特大黄金喇叭菌",
+    "路边轻骑兵地星菌", "袖珍魔法少女刺头菌", "中号一口见阿祖幽灵菌", "普通老土草帽菌", "小洁癖草帽菌", "常规酥酪宝石菌", "大蓝瘦草帽菌", "中级陈登珊瑚菌", "微小社牛猴头菌", "常见亚健康泡泡菌",
+    "巨大凑凑猫爪菌", "通常老菜菜菌", "小号挑染幽灵菌", "常规番茄炒蛋宝石菌", "小小躺板板宝石菌", "寻常滞销美灵芝", "大型椰椰菜菜菌", "巨巨太白金星刺头菌", "小巧陷阵营喇叭菌", "微小逃课猴头菌",
+    "大洁癖草帽菌", "小巧夕阳喇叭菌", "庞大夜光宝石菌", "缩水董奉珊瑚菌", "超小型不可燃鸟巢菌", "超大型木桩鸟巢菌", "大型裂开菜菜菌", "小恶毒草帽菌", "中号挑染幽灵菌", "超小型陶瓷鸟巢菌",
+    "寻常夕阳喇叭菌", "巨型朴素地星菌", "超小型厨余鸟巢菌", "中级张郃珊瑚菌", "平凡社牛猴头菌", "巨体二刺螈鹿角菌", "超大型五彩豆鸟巢菌", "袖珍小荧光刺头菌", "迷你撞色猫爪菌", "通常西凉菜菜菌",
+    "迷你暗黑猫爪菌", "巨体蔫蔫鹿角菌", "巨型森系地星菌", "硕大阴湿美灵芝", "纤小苍白美灵芝", "浓厚墨鱼丸味竹荪", "中级公孙珊珊瑚菌", "寻常红颜美灵芝", "小小夜光宝石菌", "中级贾诩珊瑚菌",
+    "庞大白切黑宝石菌", "浓厚黄花菜味竹荪", "超小实习泡泡菌", "常见看破一切泡泡菌", "大号蓝天白云幽灵菌", "小型水平太菜菜菌", "小只粉毛地星菌", "大型老菜菜菌", "大号幻象幽灵菌", "超小过劳泡泡菌",
+    "巨大红温猫爪菌", "超级高智商猴头菌", "超小型五彩豆鸟巢菌", "特大夕阳喇叭菌", "寻常苍白美灵芝", "纤小潮人美灵芝", "寻常陷阵营喇叭菌", "一般凑凑猫爪菌", "常规坏种宝石菌", "普通洁癖草帽菌",
+    "通常裂开菜菜菌", "小只朴素地星菌", "浓厚番茄味竹荪", "缩水贾诩珊瑚菌", "特大封心锁爱喇叭菌", "平凡逃课猴头菌", "小型椰椰菜菜菌", "寻常潮人美灵芝", "中等荧光刺头菌", "微型二刺螈鹿角菌",
+    "标准厨余鸟巢菌", "巨型粉毛地星菌", "超大型陶瓷鸟巢菌", "小型老菜菜菌", "清淡莲藕味竹荪", "巨大撞色猫爪菌", "硕大红颜美灵芝", "庞大坏种宝石菌", "清淡黄花菜味竹荪", "超大型不可燃鸟巢菌",
+    "小只森系地星菌", "小小白切黑宝石菌", "小型裂开菜菜菌", "超级社牛猴头菌", "硕大瘦身美灵芝", "浓厚莲藕味竹荪", "中号幻象幽灵菌", "膨胀董奉珊瑚菌", "常规夜光宝石菌", "缩水陈登珊瑚菌",
+    "中庸碧玉鹿角菌", "巨体应援棒鹿角菌", "适中黄花菜味竹荪", "微型蔫蔫鹿角菌", "特大超火爆喇叭菌", "缩水戏学珊瑚菌", "巨大暗黑猫爪菌", "超小菜色泡泡菌", "纤小瘦身美灵芝", "巨巨荧光刺头菌",
+    "小蓝瘦草帽菌", "常规白切黑宝石菌", "纤小红颜美灵芝", "中号暗黑幽灵菌", "超大实习泡泡菌", "中等邪恶刺头菌", "平凡高智商猴头菌", "小号冰山幽灵菌", "寻常青春痘喇叭菌", "大号暗黑幽灵菌",
+    "普通蓝瘦草帽菌", "寻常瘦身美灵芝", "微小高智商猴头菌", "小巧青春痘喇叭菌", "膨胀陈登珊瑚菌", "膨胀张郃珊瑚菌", "微型深渊鹿角菌", "中级董奉珊瑚菌", "硕大滞销美灵芝", "一般红温猫爪菌",
+    "膨胀公孙珊珊瑚菌", "一般撞色猫爪菌", "超级隐鸢阁冠名猴头菌", "迷你凑凑猫爪菌", "袖珍寒冰刺头菌", "中庸应援棒鹿角菌", "袖珍邪恶刺头菌", "清淡墨鱼丸味竹荪", "中等寒冰刺头菌", "路边森系地星菌",
+    "未能长大的草帽菌", "未能长大的泡泡菌", "未能长大的刺头菌", "未能长大的猫爪菌", "未能长大的珊瑚菌", "未能长大的喇叭菌", "未能长大的地星菌", "未能长大的幽灵菌", "未能长大的菜菜菌",
+    "未能长大的鹿角菌", "未能长大的猴头菌", "未能长大的鸟巢菌", "未能长大的美灵芝", "未能长大的竹荪", "未能长大的宝石菌"
+];
+
+// 原始数据列表
+const RAW_DB: MushroomDef[] = [
     ...CI_MUSHROOMS,
     ...MAO_MUSHROOMS,
     ...PAO_MUSHROOMS,
@@ -3065,3 +3100,12 @@ export const MUSHROOM_DB: MushroomDef[] = [
     ...RUBY_MUSHROOMS,
     ...HOU_MUSHROOMS,
 ];
+
+// 注入 ingameIndex
+export const MUSHROOM_DB: MushroomDef[] = RAW_DB.map(m => {
+    const index = INGAME_NAMES_ORDER.indexOf(m.name);
+    return {
+        ...m,
+        ingameIndex: index === -1 ? 9999 : index
+    };
+});

@@ -6,6 +6,7 @@ import type { FilterIntent, MushroomChildId, Order, SpecialConditionType } from 
 import { SpecialConditions, TimeRanges, VIRTUAL_ORDER_ID, Woods } from '../types';
 import {
     getChildImg,
+    getEquipmentSortKey,
     getMushroomImg,
     getSourceInfo,
     getSpecialStyle,
@@ -41,7 +42,7 @@ interface PlanPanelProps {
 }
 
 export const PlanPanel: React.FC<PlanPanelProps> = ({
-                                                        plan: {batches, missingSummary},
+                                                        plan: { batches, missingSummary },
                                                         orders,
                                                         inventory,
                                                         onAddOne,
@@ -60,10 +61,15 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
     // Tab 状态，默认显示白天
     const [activeTimeTab, setActiveTimeTab] = useState<'day' | 'night'>('day');
 
+    // 排序后的木头列表
+    const sortedWoods = useMemo(() => {
+        return [...Object.values(Woods)].sort((a, b) => getEquipmentSortKey('wood', a) - getEquipmentSortKey('wood', b));
+    }, []);
+
     const scrollToId = (id: string) => {
         const el = document.getElementById(id);
         if (el) {
-            el.scrollIntoView({behavior: 'smooth', block: 'start'});
+            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
             setIsNavOpen(false); // 跳转后自动关闭菜单
         }
     };
@@ -99,17 +105,16 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
     }, [orderGroups]);
 
     // 核心修改：监听外部筛选意图
-    // 3. 修改监听 FilterIntent 的 Effect
     useEffect(() => {
         if (!filterIntent) return;
 
         if (filterIntent.type === 'all') {
-            onUpdateFilters(prev => ({...prev, orderIds: []}));
+            onUpdateFilters(prev => ({ ...prev, orderIds: [] }));
         } else if (filterIntent.type === 'group' && filterIntent.value) {
             const groupName = filterIntent.value;
             const targetOrders = orderGroupsRef.current[groupName] || [];
             const targetIds = targetOrders.map(o => o.id);
-            onUpdateFilters(prev => ({...prev, orderIds: targetIds}));
+            onUpdateFilters(prev => ({ ...prev, orderIds: targetIds }));
         }
 
         // 关键：消费掉 intent，防止切页面回来后重复触发（导致覆盖用户的手动修改）
@@ -143,9 +148,11 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
         });
     }, [batches, filters, orders]);
 
+    // --- 修改：缺失设备提示框的排序逻辑 ---
     const filteredMissingSummary = useMemo(() => {
         if (filters.wood === 'all' && filters.status === 'all' && filters.orderIds.length === 0) {
-            return missingSummary;
+            // 对全局缺失也进行排序
+            return [...missingSummary].sort((a, b) => getEquipmentSortKey(a.type, a.value) - getEquipmentSortKey(b.type, b.value));
         }
         const map = new Map<string, MissingItem>();
         filteredBatches.forEach(batch => {
@@ -154,7 +161,8 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                 if (!map.has(key)) map.set(key, item);
             });
         });
-        return Array.from(map.values());
+        // 排序
+        return Array.from(map.values()).sort((a, b) => getEquipmentSortKey(a.type, a.value) - getEquipmentSortKey(b.type, b.value));
     }, [filteredBatches, missingSummary, filters]);
 
     const hasStrictDay = filteredBatches.some(b => b.env.time === TimeRanges.DAY);
@@ -210,12 +218,31 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
             if (isAReady !== isBReady) return isAReady ? -1 : 1;
             return a.name.localeCompare(b.name);
         });
-        const hasVirtualOrder = relatedOrders.some(o => o.id === VIRTUAL_ORDER_ID);
+
+        let hasEncyclopediaCore = false;      // 是否有核心任务属于图鉴
+        let hasEncyclopediaPassenger = false; // 是否有顺风车任务属于图鉴
+
+        const virtualOrder = orders.find(o => o.id === VIRTUAL_ORDER_ID);
+        if (virtualOrder) {
+            batch.tasks.forEach(t => {
+                const isInEncyclopedia = virtualOrder.items.some(i => i.mushroomId === t.mushroom.id);
+                if (isInEncyclopedia) {
+                    if (t.isPassenger) {
+                        hasEncyclopediaPassenger = true;
+                    } else {
+                        hasEncyclopediaCore = true;
+                    }
+                }
+            });
+        }
+
+        const showEncycBadge = hasEncyclopediaCore || hasEncyclopediaPassenger;
+        const isWeakEncycBadge = !hasEncyclopediaCore && hasEncyclopediaPassenger; // 只有顺风车 -> 弱提示(虚线)
 
         const timeWarningGroups: Record<string, { hasCore: boolean, hasPassenger: boolean }> = {};
         batch.tasks.forEach(t => {
             const key = `${t.mushroom.starter}-${t.mushroom.special || 'none'}`;
-            if (!timeWarningGroups[key]) timeWarningGroups[key] = {hasCore: false, hasPassenger: false};
+            if (!timeWarningGroups[key]) timeWarningGroups[key] = { hasCore: false, hasPassenger: false };
             if (t.isPassenger) timeWarningGroups[key].hasPassenger = true;
             else timeWarningGroups[key].hasCore = true;
         });
@@ -230,7 +257,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
             }
         });
 
-        const diseaseGroups: Record<string, PlanTask[]> = {'healthy': [], 'less': [], 'much': [], 'bug': []};
+        const diseaseGroups: Record<string, PlanTask[]> = { 'healthy': [], 'less': [], 'much': [], 'bug': [] };
         batch.tasks.forEach(task => {
             const sp = task.mushroom.special;
             if (!sp) diseaseGroups['healthy'].push(task);
@@ -281,16 +308,19 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                 key={batch.id}
                 defaultOpen={false}
                 title={
-                    <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span>第{batchIndexMap.get(batch.id)}批: {batchTitleStr}</span>
-                        {hasVirtualOrder && <span style={{
+                        {/* 使用新的判断逻辑显示Tag */}
+                        {showEncycBadge && <span style={{
                             fontSize: 11,
-                            background: '#f3e5f5',
+                            // 弱提示用白色背景+虚线框，强提示用浅紫背景+实线框
+                            background: isWeakEncycBadge ? '#ffffff' : '#f3e5f5',
                             color: '#8e24aa',
-                            border: '1px solid #e1bee7',
+                            border: isWeakEncycBadge ? '1px dashed #ba68c8' : '1px solid #e1bee7',
                             padding: '1px 6px',
                             borderRadius: 4,
-                            fontWeight: 'bold'
+                            fontWeight: 'bold',
+                            boxSizing: 'border-box'
                         }}>📖 图鉴补全</span>}
                         {isFlexibleTime && <span style={{
                             fontSize: 11,
@@ -336,13 +366,13 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                         onOpenChange={(open) => setActivePopoverId(open ? popoverKey : null)}
                                         content={
                                             isVirtual ? (
-                                                <div style={{minWidth: 150, padding: 4}}>
+                                                <div style={{ minWidth: 150, padding: 4 }}>
                                                     <div style={{
                                                         fontWeight: 'bold',
                                                         color: '#6a1b9a',
                                                         marginBottom: 4
                                                     }}>{order.name}</div>
-                                                    <div style={{fontSize: 12, color: '#333'}}>
+                                                    <div style={{ fontSize: 12, color: '#333' }}>
                                                         {(() => {
                                                             const newInBatchCount = batch.tasks.reduce((count, t) => {
                                                                 if ((inventory[t.mushroom.id] || 0) <= 0 && !collectedIds.includes(t.mushroom.id)) {
@@ -358,7 +388,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                     </div>
                                                 </div>
                                             ) : (
-                                                <div style={{minWidth: 200, padding: 4}}>
+                                                <div style={{ minWidth: 200, padding: 4 }}>
                                                     <div style={{
                                                         fontWeight: 'bold',
                                                         borderBottom: '1px dashed #eee',
@@ -379,7 +409,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                             borderRadius: 4
                                                         }}>可完成</span>}
                                                     </div>
-                                                    <div style={{display: 'flex', flexDirection: 'column', gap: 8}}>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                                         {order.items.map(item => {
                                                             const m = MUSHROOM_DB.find(d => d.id === item.mushroomId);
                                                             if (!m) return null;
@@ -398,11 +428,11 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                                     }}>
                                                                         <MiniImg src={getMushroomImg(m.id)} size={24}
                                                                                  circle/>
-                                                                        <span style={{color: '#555'}}>{m.name}</span>
+                                                                        <span style={{ color: '#555' }}>{m.name}</span>
                                                                     </div>
-                                                                    <div style={{fontSize: 11}}>
+                                                                    <div style={{ fontSize: 11 }}>
                                                                         <span
-                                                                            style={{color: '#888'}}>需{item.count}</span>
+                                                                            style={{ color: '#888' }}>需{item.count}</span>
                                                                         <span style={{
                                                                             margin: '0 4px',
                                                                             color: '#eee'
@@ -433,7 +463,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                             alignItems: 'center',
                                             gap: 3
                                         }}>
-                                            {isReady && <span style={{fontSize: 10}}>✅</span>}
+                                            {isReady && <span style={{ fontSize: 10 }}>✅</span>}
                                             {order.name}
                                         </span>
                                     </Popover>
@@ -473,8 +503,8 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                             paddingLeft: 4
                         }}>
                             {Object.keys(coreTools).length > 0 && (
-                                <div style={{display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap'}}>
-                                    <span style={{fontSize: 13, fontWeight: 'bold', color: '#555'}}>🚑 核心需:</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                                    <span style={{ fontSize: 13, fontWeight: 'bold', color: '#555' }}>🚑 核心需:</span>
                                     {Object.entries(coreTools).map(([cond, count]) => {
                                         // 动态获取颜色样式 (Blue/Purple)
                                         const style = getSpecialStyle(cond);
@@ -491,16 +521,16 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                             }}>
                                                 <MiniImg src={TOOL_INFO[cond].img} size={18} circle/>
                                                 <span
-                                                    style={{color: style.color}}>{TOOL_INFO[cond].name}</span> {/* 动态文字颜色 */}
-                                                <strong style={{color: '#d32f2f', marginLeft: 2}}>x{count}</strong>
+                                                    style={{ color: style.color }}>{TOOL_INFO[cond].name}</span> {/* 动态文字颜色 */}
+                                                <strong style={{ color: '#d32f2f', marginLeft: 2 }}>x{count}</strong>
                                             </div>
                                         );
                                     })}
                                 </div>
                             )}
                             {Object.keys(passengerTools).length > 0 && (
-                                <div style={{display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap'}}>
-                                    <span style={{fontSize: 13, fontWeight: 'bold', color: '#888'}}>🚌 蹭车需:</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                                    <span style={{ fontSize: 13, fontWeight: 'bold', color: '#888' }}>🚌 蹭车需:</span>
                                     {Object.entries(passengerTools).map(([cond, count]) => (
                                         <div key={cond} style={{
                                             display: 'flex',
@@ -514,8 +544,8 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                             opacity: 0.8
                                         }}>
                                             <MiniImg src={TOOL_INFO[cond].img} size={18} circle/>
-                                            <span style={{color: '#666'}}>{TOOL_INFO[cond].name}</span>
-                                            <strong style={{color: '#555', marginLeft: 2}}>x{count}</strong>
+                                            <span style={{ color: '#666' }}>{TOOL_INFO[cond].name}</span>
+                                            <strong style={{ color: '#555', marginLeft: 2 }}>x{count}</strong>
                                         </div>
                                     ))}
                                 </div>
@@ -556,8 +586,8 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
 
                             return (
                                 <div key={key}
-                                     style={{display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap'}}>
-                                    <span style={{fontWeight: 'bold', color, width: 60}}>{label}:</span>
+                                     style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                    <span style={{ fontWeight: 'bold', color, width: 60 }}>{label}:</span>
                                     {aggregateTasks(tasks).map((t, i) => {
                                         // 计算扣除“培育中”后的剩余需求
                                         const growing = growingCounts[t.targetId] || 0;
@@ -578,7 +608,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                 opacity: isAllCovered ? 0.5 : (t.isPassenger ? 0.7 : 1)
                                             }}>
                                                 {/* 修改：给 MiniImg 加个容器以定位红点 */}
-                                                <div style={{position: 'relative'}}>
+                                                <div style={{ position: 'relative' }}>
                                                     <MiniImg
                                                         src={getChildImg(t.starter, t.special as (SpecialConditionType | undefined))}
                                                         size={24}
@@ -599,7 +629,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                 </div>
 
                                                 <span>{MUSHROOM_CHILDREN[t.starter as MushroomChildId]}</span>
-                                                <span style={{fontWeight: 'bold', color, marginLeft: 2}}>
+                                                <span style={{ fontWeight: 'bold', color, marginLeft: 2 }}>
                                                     x{remainingNeeded}
                                                     {/* 如果有正在培育的，显示总数提示 */}
                                                     {growing > 0 && <span style={{
@@ -664,7 +694,13 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                     justifyContent: 'space-between',
                                     gap: 10
                                 }}>
-                                    <div style={{display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0}}>
+                                    <div style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 10,
+                                        flex: 1,
+                                        minWidth: 0
+                                    }}>
                                         <Popover content={<MushroomInfoCard m={task.mushroom}/>}
                                                  isOpen={activePopoverId === task.mushroom.id}
                                                  onOpenChange={(isOpen) => setActivePopoverId(isOpen ? task.mushroom.id : null)}>
@@ -672,7 +708,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                      size={40}/>
                                         </Popover>
                                         {/* 替换中间的信息显示 div */}
-                                        <div style={{flex: 1, minWidth: 0}}>
+                                        <div style={{ flex: 1, minWidth: 0 }}>
                                             <div style={{
                                                 fontWeight: 'bold',
                                                 fontSize: 14,
@@ -707,14 +743,14 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                 marginTop: 4,
                                                 gap: 8
                                             }}>
-                                                <div style={{display: 'flex', alignItems: 'center', gap: 6}}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                                     <div
                                                         title={`初始菌种: ${MUSHROOM_CHILDREN[task.mushroom.starter]}`}>
                                                         <MiniImg
                                                             src={getChildImg(task.mushroom.starter, task.mushroom.special)}
                                                             size={20}
                                                             circle
-                                                            style={{border: '1px solid #eee'}}
+                                                            style={{ border: '1px solid #eee' }}
                                                         />
                                                     </div>
                                                     {/* 响应式道具标签 */}
@@ -742,13 +778,19 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                                 <>
                                                                     {/* 模式1：全名 (宽度充足) */}
                                                                     <div className="tool-display-full"
-                                                                         style={{...baseBadgeStyle, padding: '0 6px'}}>
+                                                                         style={{
+                                                                             ...baseBadgeStyle,
+                                                                             padding: '0 6px'
+                                                                         }}>
                                                                         <span>🍬 {toolName}</span>
                                                                     </div>
 
                                                                     {/* 模式2：后3字 (宽度一般) */}
                                                                     <div className="tool-display-short"
-                                                                         style={{...baseBadgeStyle, padding: '0 4px'}}>
+                                                                         style={{
+                                                                             ...baseBadgeStyle,
+                                                                             padding: '0 4px'
+                                                                         }}>
                                                                         <span>🍬 {shortName}</span>
                                                                     </div>
 
@@ -772,7 +814,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                 </div>
 
                                                 {/* 右侧库存信息：新增“培育中”显示 */}
-                                                <div style={{fontSize: 12, color: '#666', whiteSpace: 'nowrap'}}>
+                                                <div style={{ fontSize: 12, color: '#666', whiteSpace: 'nowrap' }}>
                                                     需: <span style={{
                                                     color: '#d32f2f',
                                                     fontWeight: 'bold'
@@ -781,15 +823,18 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                     {/* 如果有培育中的数量，显示出来 */}
                                                     {growingCounts[task.mushroom.id] ? (
                                                         <>
-                                                            <span style={{margin: '0 4px', color: '#ddd'}}>|</span>
-                                                            <span style={{color: '#e65100', fontWeight: 'bold'}}
+                                                            <span style={{ margin: '0 4px', color: '#ddd' }}>|</span>
+                                                            <span style={{ color: '#e65100', fontWeight: 'bold' }}
                                                                   title="已救助但未长成">⏳{growingCounts[task.mushroom.id]}</span>
                                                         </>
                                                     ) : null}
 
-                                                    <span style={{margin: '0 4px', color: '#ddd'}}>|</span>
+                                                    <span style={{ margin: '0 4px', color: '#ddd' }}>|</span>
                                                     存: <span
-                                                    style={{color: '#2e7d32', fontWeight: 'bold'}}>{currentStock}</span>
+                                                    style={{
+                                                        color: '#2e7d32',
+                                                        fontWeight: 'bold'
+                                                    }}>{currentStock}</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -865,8 +910,8 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                 justifyContent: 'space-between',
                 alignItems: 'center'
             }}>
-                <div style={{display: 'flex', alignItems: 'center', gap: 15}}>
-                    <h2 style={{margin: 0, color: '#333'}}>🌱 培育计划</h2>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 15 }}>
+                    <h2 style={{ margin: 0, color: '#333' }}>🌱 培育计划</h2>
                     <span style={{
                         fontSize: 12,
                         color: '#c62828',
@@ -878,7 +923,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                 </div>
             </div>
 
-            <div style={{padding: 20}}>
+            <div style={{ padding: 20 }}>
                 {filteredMissingSummary.length > 0 && (
                     <div style={{
                         background: '#ffebee',
@@ -887,9 +932,9 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                         padding: 15,
                         marginBottom: 20
                     }}>
-                        <strong style={{display: 'block', marginBottom: 10, color: '#c62828'}}>⚠️
+                        <strong style={{ display: 'block', marginBottom: 10, color: '#c62828' }}>⚠️
                             缺少以下关键设备（仅统计当前筛选）：</strong>
-                        <div style={{display: 'flex', flexWrap: 'wrap', gap: 10}}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
                             {filteredMissingSummary.map((item, idx) => (
                                 <div key={`${item.type}-${item.value}-${idx}`} style={{
                                     display: 'flex',
@@ -904,8 +949,11 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                     boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
                                 }}>
                                     <span>{getToolIcon(item.type)}</span><span
-                                    style={{fontWeight: 'bold'}}>{item.value}</span><span
-                                    style={{fontSize: 12, opacity: 0.8}}>({getSourceInfo(item.type, item.value)})</span>
+                                    style={{ fontWeight: 'bold' }}>{item.value}</span><span
+                                    style={{
+                                        fontSize: 12,
+                                        opacity: 0.8
+                                    }}>({getSourceInfo(item.type, item.value)})</span>
                                 </div>
                             ))}
                         </div>
@@ -913,17 +961,17 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                 )}
 
                 {filteredBatches.length === 0 ? (
-                    <div style={{textAlign: 'center', padding: 40, color: '#aaa'}}>
+                    <div style={{ textAlign: 'center', padding: 40, color: '#aaa' }}>
                         {batches.length === 0 ? <>
-                            <div style={{fontSize: 40, marginBottom: 10}}>🎉</div>
+                            <div style={{ fontSize: 40, marginBottom: 10 }}>🎉</div>
                             需求满足</> : <>🔍 没有符合筛选条件的批次</>}
                     </div>
                 ) : (
-                    <div style={{display: 'flex', flexDirection: 'column', gap: 30}}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 30 }}>
                         {showSplitLayout ? (
-                            <div style={{display: 'flex', flexDirection: 'column', gap: 15}}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 15 }}>
                                 {/* 新增：Tab 切换按钮 */}
-                                <div style={{display: 'flex', gap: 10}}>
+                                <div style={{ display: 'flex', gap: 10 }}>
                                     <button
                                         onClick={() => setActiveTimeTab('day')}
                                         style={{
@@ -1001,7 +1049,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                         borderRadius: 8,
                                         border: `1px solid ${config.border}`
                                     }}>
-                                        <h3 style={{marginTop: 0, color: config.titleColor}}>{config.title}</h3>
+                                        <h3 style={{ marginTop: 0, color: config.titleColor }}>{config.title}</h3>
                                         {filteredBatches.map((batch, i) => renderBatch(batch, i, batch.env.time === '任意'))}
                                     </div>
                                 );
@@ -1013,7 +1061,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
 
             {/* Filter UI */}
             {isFilterOpen && <div onClick={() => setIsFilterOpen(false)}
-                                  style={{position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000}}/>}
+                                  style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000 }}/>}
             <div style={{
                 position: 'fixed',
                 bottom: 100,
@@ -1035,12 +1083,17 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                 transition: 'all 0.2s'
             }}>
                 <div
-                    style={{fontWeight: 'bold', color: '#333', borderBottom: '1px solid #f0f0f0', paddingBottom: 10}}>🔍
+                    style={{
+                        fontWeight: 'bold',
+                        color: '#333',
+                        borderBottom: '1px solid #f0f0f0',
+                        paddingBottom: 10
+                    }}>🔍
                     筛选培育计划
                 </div>
 
                 <div>
-                    <div style={{fontSize: 13, color: '#666', marginBottom: 6, fontWeight: '500'}}>🧾 关联订单 (多选)
+                    <div style={{ fontSize: 13, color: '#666', marginBottom: 6, fontWeight: '500' }}>🧾 关联订单 (多选)
                     </div>
                     <div style={{
                         maxHeight: 250,
@@ -1073,7 +1126,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                             };
 
                             return (
-                                <div key={groupName} style={{marginBottom: 4}}>
+                                <div key={groupName} style={{ marginBottom: 4 }}>
                                     <div style={{
                                         display: 'flex',
                                         alignItems: 'center',
@@ -1089,12 +1142,12 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                 if (el) el.indeterminate = isGroupPartialSelected;
                                             }}
                                             onChange={toggleGroup}
-                                            style={{marginRight: 6}}
+                                            style={{ marginRight: 6 }}
                                         />
-                                        <span style={{fontSize: 12, fontWeight: 'bold', flex: 1}}>{groupName}</span>
+                                        <span style={{ fontSize: 12, fontWeight: 'bold', flex: 1 }}>{groupName}</span>
                                     </div>
                                     {groupName !== '图鉴' && (
-                                        <div style={{paddingLeft: 10, display: 'flex', flexDirection: 'column'}}>
+                                        <div style={{ paddingLeft: 10, display: 'flex', flexDirection: 'column' }}>
                                             {groupOrders.map(order => {
                                                 // 新增：判断是否可完成，用于加样式
                                                 const isReady = order.items.length > 0 && order.items.every(i => (inventory[i.mushroomId] || 0) >= i.count);
@@ -1143,9 +1196,9 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                             );
                         })}
                         {Object.values(orderGroups).every(arr => arr.length === 0) &&
-                            <div style={{padding: 8, color: '#999', fontSize: 12}}>暂无订单</div>}
+                            <div style={{ padding: 8, color: '#999', fontSize: 12 }}>暂无订单</div>}
                     </div>
-                    <div style={{display: 'flex', justifyContent: 'flex-end', marginTop: 4, gap: 8}}>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4, gap: 8 }}>
                         <span onClick={() => onUpdateFilters(prev => ({
                             ...prev,
                             orderIds: orders.filter(o => o.active).map(o => o.id)
@@ -1155,7 +1208,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                             cursor: 'pointer',
                             textDecoration: 'underline'
                         }}>全选</span>
-                        <span onClick={() => onUpdateFilters(prev => ({...prev, orderIds: []}))} style={{
+                        <span onClick={() => onUpdateFilters(prev => ({ ...prev, orderIds: [] }))} style={{
                             fontSize: 11,
                             color: '#999',
                             cursor: 'pointer',
@@ -1165,17 +1218,18 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                 </div>
 
                 <div>
-                    <div style={{fontSize: 13, color: '#666', marginBottom: 6, fontWeight: '500'}}>🪵 木头类型</div>
-                    <select value={filters.wood} onChange={e => onUpdateFilters({...filters, wood: e.target.value})}
-                            style={{width: '100%', padding: '6px', borderRadius: 4, border: '1px solid #ddd'}}>
+                    <div style={{ fontSize: 13, color: '#666', marginBottom: 6, fontWeight: '500' }}>🪵 木头类型</div>
+                    <select value={filters.wood} onChange={e => onUpdateFilters({ ...filters, wood: e.target.value })}
+                            style={{ width: '100%', padding: '6px', borderRadius: 4, border: '1px solid #ddd' }}>
                         <option value="all">全部</option>
-                        {Object.values(Woods).map(w => <option key={w} value={w}>{w}</option>)}
+                        {sortedWoods.map(w => <option key={w} value={w}>{w}</option>)}
                     </select>
                 </div>
                 <div>
-                    <div style={{fontSize: 13, color: '#666', marginBottom: 6, fontWeight: '500'}}>🚦 道具状态</div>
-                    <select value={filters.status} onChange={e => onUpdateFilters({...filters, status: e.target.value})}
-                            style={{width: '100%', padding: '6px', borderRadius: 4, border: '1px solid #ddd'}}>
+                    <div style={{ fontSize: 13, color: '#666', marginBottom: 6, fontWeight: '500' }}>🚦 道具状态</div>
+                    <select value={filters.status}
+                            onChange={e => onUpdateFilters({ ...filters, status: e.target.value })}
+                            style={{ width: '100%', padding: '6px', borderRadius: 4, border: '1px solid #ddd' }}>
                         <option value="all">全部</option>
                         <option value="ready">✅ 道具齐全</option>
                         <option value="missing">🚫 缺道具</option>
@@ -1286,7 +1340,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                     title="快速跳转"
                 >
                     {isNavOpen ? (
-                        <span style={{fontSize: 24, fontWeight: 'bold'}}>✕</span>
+                        <span style={{ fontSize: 24, fontWeight: 'bold' }}>✕</span>
                     ) : (
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

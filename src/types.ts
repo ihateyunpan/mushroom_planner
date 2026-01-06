@@ -71,6 +71,14 @@ export const SpecialConditions = {
 } as const;
 export type SpecialConditionType = typeof SpecialConditions[keyof typeof SpecialConditions];
 
+// 新增：道具品级枚举
+export const ItemRanks = {
+    FAN: 1, // 凡品
+    ZHEN: 2, // 珍品
+    XIAN: 3, // 仙品
+} as const;
+export type ItemRank = typeof ItemRanks[keyof typeof ItemRanks];
+
 // 常量：虚拟图鉴订单ID
 export const VIRTUAL_ORDER_ID = 'ENCYCLOPEDIA_VIRTUAL_ORDER';
 
@@ -86,7 +94,8 @@ export interface MushroomDef {
     humidifier?: HumidifierType; // 如果未定义，表示兼容任何湿度
     time?: TimeType; // 如果未定义，表示兼容任何时间
     special?: SpecialConditionType; // 如果未定义，就是不需要特殊情况
-    save?: boolean // 如果有特殊情况，要不要处理
+    save?: boolean; // 如果有特殊情况，要不要处理
+    ingameIndex?: number; // 新增：游戏内图鉴顺序
 }
 
 // 订单
