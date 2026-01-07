@@ -761,6 +761,15 @@ function App() {
         return calculateOptimalRoute(computedData);
     }, [data, allOrdersWithVirtual, planVersion]);
 
+    const promptAndCollect = (id: string) => {
+        const isUncollected = !data.collectedMushrooms.includes(id);
+        if (isUncollected) {
+            if (window.confirm(`🎉 恭喜！这是你图鉴里未收集的菌种。\n是否要顺便标记为“已收集”？`)) {
+                toggleCollection(id);
+            }
+        }
+    }
+
     return (
         <div className="app-container">
             <Header
@@ -878,12 +887,7 @@ function App() {
                             orders={allOrdersWithVirtual}
                             inventory={data.inventory}
                             onAddOne={(id) => {
-                                const isUncollected = !data.collectedMushrooms.includes(id);
-                                if (isUncollected) {
-                                    if (window.confirm(`🎉 恭喜！这是你图鉴里未收集的菌种。\n是否要顺便标记为“已收集”？`)) {
-                                        toggleCollection(id);
-                                    }
-                                }
+                                promptAndCollect(id);
                                 handleAddOne(id);
                             }}
                             collectedIds={data.collectedMushrooms || []}
@@ -893,6 +897,12 @@ function App() {
                             onConsumeFilterIntent={() => setFilterIntent(null)}
                             growingCounts={data.growing || {}}
                             onUpdateGrowing={updateGrowingCount}
+                            onUpdateInventory={(id: string, count: number) => {
+                                if (count > 0) {
+                                    promptAndCollect(id);
+                                }
+                                updateInventory(id, count);
+                            }}
                         />
                     </div>
                 </div>

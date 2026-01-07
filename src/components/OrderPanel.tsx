@@ -2,55 +2,10 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { MUSHROOM_DB } from '../database';
 import { getMushroomImg, getMushroomRankColor, PROTAGONISTS } from '../utils';
-import { CollapsibleSection, MiniImg, MushroomInfoCard, MushroomSelector, Popover } from './Common';
+import { BufferedCountInput, CollapsibleSection, MiniImg, MushroomInfoCard, MushroomSelector, Popover } from './Common';
 import type { FilterIntent, HumidifierType, LightType, Order, WoodType } from '../types';
 import { VIRTUAL_ORDER_ID } from '../types';
 import { calculatedOrderAdjustedEffort, calculateOrderDifficulty } from "../logic.ts";
-
-// --- 新增：带缓冲的数字输入框 (解决打字延迟 + 统一样式) ---
-const BufferedCountInput: React.FC<{
-    value: number;
-    onCommit: (val: number) => void;
-    min?: number;
-}> = ({ value, onCommit, min = 0 }) => {
-    const [localVal, setLocalVal] = useState(value.toString());
-
-    // 当外部 props 改变时（例如重置表单），同步更新内部状态
-    React.useEffect(() => {
-        setLocalVal(value.toString());
-    }, [value]);
-
-    const handleCommit = () => {
-        const num = parseInt(localVal);
-        if (!isNaN(num) && num >= min) {
-            onCommit(num);
-        } else {
-            setLocalVal(value.toString()); // 输入无效时回滚
-        }
-    };
-
-    return (
-        <input
-            type="number"
-            min={min}
-            value={localVal}
-            onChange={(e) => setLocalVal(e.target.value)}
-            onBlur={handleCommit}
-            onKeyDown={(e) => e.key === 'Enter' && handleCommit()}
-            style={{
-                width: 50, // 统一宽度
-                padding: 2,
-                textAlign: 'center',
-                border: 'none',
-                borderBottom: '1px solid #ccc',
-                outline: 'none',
-                background: 'transparent',
-                fontWeight: 'normal', // 保持统一风格
-                fontSize: 'inherit'
-            }}
-        />
-    );
-};
 
 // --- 新增：查重对比 Modal ---
 const DuplicateCheckModal: React.FC<{
@@ -220,10 +175,20 @@ const StatusBadge: React.FC<{ active: boolean; equipReady: boolean; stockReady: 
             style={{ ...baseStyle, background: '#f5f5f5', color: '#999', border: '1px solid #ddd' }}>⏸️ 已暂停</span>;
     }
     if (stockReady) {
-        return <span style={{ ...baseStyle, background: '#e8f5e9', color: '#2e7d32', border: '1px solid #a5d6a7' }}>✅ 可完成</span>;
+        return <span style={{
+            ...baseStyle,
+            background: '#e8f5e9',
+            color: '#2e7d32',
+            border: '1px solid #a5d6a7'
+        }}>✅ 可完成</span>;
     }
     if (equipReady) {
-        return <span style={{ ...baseStyle, background: '#e3f2fd', color: '#1565c0', border: '1px solid #90caf9' }}>🚀 可开始</span>;
+        return <span style={{
+            ...baseStyle,
+            background: '#e3f2fd',
+            color: '#1565c0',
+            border: '1px solid #90caf9'
+        }}>🚀 可开始</span>;
     }
     return <span
         style={{ ...baseStyle, background: '#fff3e0', color: '#ef6c00', border: '1px solid #ffe0b2' }}>⚠️ 缺道具</span>;
@@ -391,25 +356,23 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
 
             if (orderA.active !== orderB.active) return orderA.active ? -1 : 1;
 
-            if (orderA.active) {
-                const stockA = checkStockReady(orderA);
-                const stockB = checkStockReady(orderB);
-                // Tier 0: 可完成优先
-                if (stockA !== stockB) return stockA ? -1 : 1;
+            const stockA = checkStockReady(orderA);
+            const stockB = checkStockReady(orderB);
+            // Tier 0: 可完成优先
+            if (stockA !== stockB) return stockA ? -1 : 1;
 
-                const equipA = checkEquipmentReady(orderA);
-                const equipB = checkEquipmentReady(orderB);
-                // Tier 1 vs Tier 2: 可开始优先
-                if (equipA !== equipB) return equipA ? -1 : 1;
+            const equipA = checkEquipmentReady(orderA);
+            const equipB = checkEquipmentReady(orderB);
+            // Tier 1 vs Tier 2: 可开始优先
+            if (equipA !== equipB) return equipA ? -1 : 1;
 
-                // --- 新增：Tier 内部按“剩余难度”排序 (低 -> 高) ---
-                // 只有当两者都不具备完成条件（或者都具备开始条件）时才比较难度
-                // 如果都可完成(stockReady)，其实 difficulty 都是 0，这里也不影响
-                const diffA = calculateOrderDifficulty(orderA, inventory);
-                const diffB = calculateOrderDifficulty(orderB, inventory);
-                if (diffA !== diffB) return diffA - diffB;
-                // ------------------------------------------------
-            }
+            // --- 新增：Tier 内部按“剩余难度”排序 (低 -> 高) ---
+            // 只有当两者都不具备完成条件（或者都具备开始条件）时才比较难度
+            // 如果都可完成(stockReady)，其实 difficulty 都是 0，这里也不影响
+            const diffA = calculateOrderDifficulty(orderA, inventory);
+            const diffB = calculateOrderDifficulty(orderB, inventory);
+            if (diffA !== diffB) return diffA - diffB;
+            // ------------------------------------------------
 
             return a.index - b.index;
         }).map(item => item.order);

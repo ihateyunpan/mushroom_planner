@@ -53,7 +53,7 @@ export const MiniImg: React.FC<{
                 setShowReal(true);
                 observer.disconnect();
             }
-        }, {rootMargin: '200px'});
+        }, { rootMargin: '200px' });
 
         if (containerRef.current) {
             observer.observe(containerRef.current);
@@ -112,7 +112,7 @@ export const CollapsibleSection: React.FC<{
     headerColor?: string;
     headerBg?: string;
     action?: React.ReactNode;
-}> = ({title, children, defaultOpen = false, headerColor = '#333', headerBg = '#f8f9fa', action}) => {
+}> = ({ title, children, defaultOpen = false, headerColor = '#333', headerBg = '#f8f9fa', action }) => {
     const [isOpen, setIsOpen] = useState(defaultOpen);
     return (
         <div style={{
@@ -141,15 +141,15 @@ export const CollapsibleSection: React.FC<{
                 </div>
                 <div onClick={e => e.stopPropagation()}>{action}</div>
             </div>
-            {isOpen && <div style={{padding: 15}}>{children}</div>}
+            {isOpen && <div style={{ padding: 15 }}>{children}</div>}
         </div>
     );
 };
 
-export const EnvBadge: React.FC<{ label: string; value: string; icon: string }> = ({label, value, icon}) => (
-    <div style={{display: 'flex', alignItems: 'center', gap: 5, fontSize: 13}}>
-        <span>{icon}</span><span style={{color: '#888'}}>{label}:</span><strong
-        style={{color: value === '任意' ? '#aaa' : '#333'}}>{value}</strong>
+export const EnvBadge: React.FC<{ label: string; value: string; icon: string }> = ({ label, value, icon }) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13 }}>
+        <span>{icon}</span><span style={{ color: '#888' }}>{label}:</span><strong
+        style={{ color: value === '任意' ? '#aaa' : '#333' }}>{value}</strong>
     </div>
 );
 
@@ -174,9 +174,9 @@ export const Popover: React.FC<{
     children: React.ReactNode;
     isOpen?: boolean;
     onOpenChange?: (open: boolean) => void;
-}> = ({content, children, isOpen, onOpenChange}) => {
+}> = ({ content, children, isOpen, onOpenChange }) => {
     const [internalOpen, setInternalOpen] = useState(false);
-    const [layout, setLayout] = useState({top: 0, left: 0, arrowOffset: 0});
+    const [layout, setLayout] = useState({ top: 0, left: 0, arrowOffset: 0 });
     const triggerRef = useRef<HTMLDivElement>(null);
 
     const isControlled = isOpen !== undefined;
@@ -233,7 +233,7 @@ export const Popover: React.FC<{
 
     return (
         <>
-            <div ref={triggerRef} onClick={handleToggle} style={{cursor: 'pointer', display: 'inline-block'}}>
+            <div ref={triggerRef} onClick={handleToggle} style={{ cursor: 'pointer', display: 'inline-block' }}>
                 {children}
             </div>
             {visible && createPortal(
@@ -268,23 +268,23 @@ export const Popover: React.FC<{
     );
 };
 
-export const MushroomInfoCard: React.FC<{ m: MushroomDef }> = ({m}) => {
+export const MushroomInfoCard: React.FC<{ m: MushroomDef }> = ({ m }) => {
     return (
-        <div style={{display: 'flex', flexDirection: 'column', gap: 8}}>
-            <div style={{display: 'flex', gap: 10, borderBottom: '1px dashed #eee', paddingBottom: 8}}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 10, borderBottom: '1px dashed #eee', paddingBottom: 8 }}>
                 <MiniImg src={getMushroomImg(m.id)} label={m.name} size={40}/>
                 <div>
-                    <div style={{fontWeight: 'bold', fontSize: 14}}>{m.name}</div>
-                    <div style={{fontSize: 11, color: '#999'}}>ID: {m.id}</div>
+                    <div style={{ fontWeight: 'bold', fontSize: 14 }}>{m.name}</div>
+                    <div style={{ fontSize: 11, color: '#999' }}>ID: {m.id}</div>
                 </div>
             </div>
-            <div style={{fontSize: 12, display: 'flex', flexDirection: 'column', gap: 5}}>
-                <div style={{display: 'flex', alignItems: 'center', gap: 6}}>
-                    <span style={{color: '#888'}}>起始:</span>
+            <div style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 5 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ color: '#888' }}>起始:</span>
                     <MiniImg src={getChildImg(m.starter, m.special)} label={m.starter} size={20} circle/>
                     <span>{MUSHROOM_CHILDREN[m.starter]}</span>
                 </div>
-                <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4}}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
                     <EnvBadge label="木头" value={m.wood || '任意'} icon="🪵"/>
                     <EnvBadge label="日照" value={m.light || '任意'} icon="💡"/>
                     <EnvBadge label="补水" value={m.humidifier || '任意'} icon="💧"/>
@@ -337,7 +337,11 @@ export const MushroomInfoCard: React.FC<{ m: MushroomDef }> = ({m}) => {
                                             )}
                                         </div>
                                     ) : (
-                                        <span style={{ color: '#c62828', fontWeight: 'bold', whiteSpace: 'nowrap' }}>❌ 不救</span>
+                                        <span style={{
+                                            color: '#c62828',
+                                            fontWeight: 'bold',
+                                            whiteSpace: 'nowrap'
+                                        }}>❌ 不救</span>
                                     )}
                                 </div>
                             </div>
@@ -349,7 +353,7 @@ export const MushroomInfoCard: React.FC<{ m: MushroomDef }> = ({m}) => {
     );
 };
 
-export const MushroomSelector: React.FC<{ onSelect: (id: string) => void }> = ({onSelect}) => {
+export const MushroomSelector: React.FC<{ onSelect: (id: string) => void }> = ({ onSelect }) => {
     const [term, setTerm] = useState('');
 
     const results = React.useMemo(() => {
@@ -359,7 +363,7 @@ export const MushroomSelector: React.FC<{ onSelect: (id: string) => void }> = ({
     }, [term]);
 
     return (
-        <div style={{position: 'relative', width: '100%', zIndex: 10, marginTop: 10}}>
+        <div style={{ position: 'relative', width: '100%', zIndex: 10, marginTop: 10 }}>
             <input placeholder="🔍 添加菌种：搜名或拼音首字母 (如: wnz)" value={term}
                    onChange={e => setTerm(e.target.value)}
                    style={{
@@ -398,13 +402,59 @@ export const MushroomSelector: React.FC<{ onSelect: (id: string) => void }> = ({
                         }}>
                             <MiniImg src={getMushroomImg(m.id)} label={m.name} size={28}/>
                             <div>
-                                <div style={{fontSize: 13}}>{m.name}</div>
+                                <div style={{ fontSize: 13 }}>{m.name}</div>
                             </div>
                         </div>
                     ))}
-                    {results.length === 0 && <div style={{padding: 10, color: '#999', fontSize: 12}}>无匹配菌种</div>}
+                    {results.length === 0 && <div style={{ padding: 10, color: '#999', fontSize: 12 }}>无匹配菌种</div>}
                 </div>
             )}
         </div>
     )
 }
+
+export const BufferedCountInput: React.FC<{
+    value: number;
+    onCommit: (val: number) => void;
+    min?: number;
+    style?: React.CSSProperties; // 允许自定义样式
+}> = ({ value, onCommit, min = 0, style }) => {
+    const [localVal, setLocalVal] = useState(value.toString());
+
+    // 当外部 props 改变时（例如重置表单），同步更新内部状态
+    React.useEffect(() => {
+        setLocalVal(value.toString());
+    }, [value]);
+
+    const handleCommit = () => {
+        const num = parseInt(localVal);
+        if (!isNaN(num) && num >= min) {
+            onCommit(num);
+        } else {
+            setLocalVal(value.toString()); // 输入无效时回滚
+        }
+    };
+
+    return (
+        <input
+            type="number"
+            min={min}
+            value={localVal}
+            onChange={(e) => setLocalVal(e.target.value)}
+            onBlur={handleCommit}
+            onKeyDown={(e) => e.key === 'Enter' && handleCommit()}
+            style={{
+                width: 50, // 统一宽度
+                padding: 2,
+                textAlign: 'center',
+                border: 'none',
+                borderBottom: '1px solid #ccc',
+                outline: 'none',
+                background: 'transparent',
+                fontWeight: 'normal', // 保持统一风格
+                fontSize: 'inherit',
+                ...style // 合并样式
+            }}
+        />
+    );
+};

@@ -16,7 +16,7 @@ import {
     PROTAGONISTS,
     TOOL_INFO
 } from '../utils';
-import { CollapsibleSection, EnvBadge, MiniImg, MushroomInfoCard, Popover } from './Common';
+import { BufferedCountInput, CollapsibleSection, EnvBadge, MiniImg, MushroomInfoCard, Popover } from './Common';
 import { btnStyle } from "../styles";
 
 interface PlanPanelProps {
@@ -41,6 +41,7 @@ interface PlanPanelProps {
     onConsumeFilterIntent: () => void;
     growingCounts: Record<string, number>;
     onUpdateGrowing: (id: string, delta: number) => void;
+    onUpdateInventory: (id: string, count: number) => void;
 }
 
 export const PlanPanel: React.FC<PlanPanelProps> = ({
@@ -55,6 +56,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                         onConsumeFilterIntent,
                                                         growingCounts,
                                                         onUpdateGrowing,
+                                                        onUpdateInventory,
                                                     }) => {
     const [activePopoverId, setActivePopoverId] = useState<string | null>(null);
     const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -294,8 +296,13 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
         const passengerTools: Record<string, number> = {};
         batch.tasks.forEach(t => {
             if (t.mushroom.special && t.mushroom.save && TOOL_INFO[t.mushroom.special]) {
-                if (t.isPassenger) passengerTools[t.mushroom.special] = (passengerTools[t.mushroom.special] || 0) + t.countNeeded;
-                else coreTools[t.mushroom.special] = (coreTools[t.mushroom.special] || 0) + t.countNeeded;
+                const growing = growingCounts[t.mushroom.id] || 0;
+                const remaining = Math.max(0, t.countNeeded - growing);
+
+                if (remaining > 0) { // 只有剩余大于0才统计
+                    if (t.isPassenger) passengerTools[t.mushroom.special] = (passengerTools[t.mushroom.special] || 0) + remaining;
+                    else coreTools[t.mushroom.special] = (coreTools[t.mushroom.special] || 0) + remaining;
+                }
             }
         });
 
@@ -357,6 +364,27 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
         if (batch.env.light !== '任意') envParts.push(batch.env.light);
         if (batch.env.humidifier !== '任意') envParts.push(batch.env.humidifier);
         const batchTitleStr = envParts.join(' + ');
+
+        // --- 新增：查找原生菌种 ---
+        const nativeMushroom = MUSHROOM_DB.find(m => {
+            if (Woods.BAI == batch.env.wood) {
+                return m.id == 'cao1';
+            }
+
+            return (m.wood === batch.env.wood &&
+                (!m.light) &&
+                (!m.humidifier) &&
+                (!m.time) &&
+                !m.special)
+        });
+        const nativeBadge = <span style={{
+            fontSize: 10,
+            padding: '1px 4px',
+            borderRadius: 3,
+            background: '#e1f5fe',
+            color: '#0277bd',
+            border: '1px solid #81d4fa',
+        }}>原生</span>;
 
         return (
             <CollapsibleSection
@@ -812,6 +840,8 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                             const isPassenger = !!task.isPassenger;
                             const currentStock = inventory[task.mushroom.id] || 0;
                             const isUncollected = !collectedIds.includes(task.mushroom.id);
+                            const isNativeTask = nativeMushroom && task.mushroom.id === nativeMushroom.id;
+
                             return (
                                 <div key={tIdx} style={{
                                     border: isPassenger ? '1px dashed #ccc' : '1px solid #eee',
@@ -866,6 +896,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                     borderRadius: 4,
                                                     padding: '0 4px'
                                                 }}>新</span>}
+                                                {isNativeTask && nativeBadge}
                                             </div>
 
                                             <div style={{
@@ -962,40 +993,136 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                     ) : null}
 
                                                     <span style={{ margin: '0 4px', color: '#ddd' }}>|</span>
-                                                    存: <span
-                                                    style={{
-                                                        color: '#2e7d32',
-                                                        fontWeight: 'bold'
-                                                    }}>{currentStock}</span>
+                                                    存:
+
+                                                    {!isNativeTask && (<>
+                                                        <span
+                                                            style={{
+                                                                color: '#2e7d32',
+                                                                fontWeight: 'bold'
+                                                            }}>{currentStock}</span>
+                                                    </>)}
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
-                                    {/* 替换 +1 按钮 */}
-                                    <button
-                                        onClick={() => {
-                                            // 1. 原本的操作：库存+1
-                                            onAddOne(task.mushroom.id);
-                                            // 2. 新操作：培育中数量-1 (如果大于0)
-                                            if (growingCounts[task.mushroom.id] > 0) {
-                                                onUpdateGrowing(task.mushroom.id, -1);
-                                            }
-                                        }}
-                                        style={{
-                                            ...btnStyle,
-                                            background: '#e8f5e9',
-                                            border: '1px solid #a5d6a7',
-                                            color: '#2e7d32',
-                                            fontWeight: 'bold',
-                                            padding: '6px 10px',
-                                            height: 'fit-content',
-                                            flexShrink: 0,
-                                            whiteSpace: 'nowrap'
-                                        }} title="收获 (+1库存, -1培育中)"> +1
-                                    </button>
+                                    {isNativeTask ? (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                            <BufferedCountInput
+                                                min={0}
+                                                value={currentStock}
+                                                onCommit={(val) => onUpdateInventory(task.mushroom.id, val)}
+                                                style={{
+                                                    width: 60,
+                                                    padding: '4px',
+                                                    borderRadius: 4,
+                                                    border: '1px solid #a5d6a7',
+                                                    fontWeight: 'bold',
+                                                    color: '#2e7d32',
+                                                    background: '#e8f5e9'
+                                                }}
+                                            />
+                                        </div>
+                                    ) : (
+                                        <button
+                                            onClick={() => {
+                                                // 1. 原本的操作：库存+1
+                                                onAddOne(task.mushroom.id);
+                                                // 2. 新操作：培育中数量-1 (如果大于0)
+                                                if (growingCounts[task.mushroom.id] > 0) {
+                                                    onUpdateGrowing(task.mushroom.id, -1);
+                                                }
+                                            }}
+                                            style={{
+                                                ...btnStyle,
+                                                background: '#e8f5e9',
+                                                border: '1px solid #a5d6a7',
+                                                color: '#2e7d32',
+                                                fontWeight: 'bold',
+                                                padding: '6px 10px',
+                                                height: 'fit-content',
+                                                flexShrink: 0,
+                                                whiteSpace: 'nowrap'
+                                            }} title="收获 (+1库存, -1培育中)"> +1
+                                        </button>
+                                    )}
                                 </div>
-                            );
+                            )
+                                ;
                         })}
+                        {/* --- 额外的原生菌种卡片 --- */}
+                        {/* 只有当原生菌种存在，且不在上面的 batch.tasks 里时才显示 */}
+                        {nativeMushroom && !batch.tasks.some(t => t.mushroom.id === nativeMushroom.id) && (
+                            (() => {
+                                // 判断环境是否“纯净”（即没有强制要求特殊的光照或加湿器）
+                                // 注意：木头和时间已被确定为 batch.env 的属性
+                                const isSimpleEnv =
+                                    (batch.env.light === '任意') &&
+                                    (batch.env.humidifier === '任意');
+
+                                // 样式配置
+                                const cardStyle = isSimpleEnv ? {
+                                    badgeBg: '#fff',
+                                    border: '1px dashed #ccc',    // 蹭车样式：虚线灰
+                                    bg: '#fff',
+                                    text: '#555',                 // 深灰文字
+                                    subText: '#999',              // 浅灰提示
+                                    badgeBorder: '1px solid #ddd'
+                                } : {
+                                    border: '1px dashed #ccc',    // 蹭车样式：虚线灰
+                                    bg: '#f9f9f9',                // 浅灰背景
+                                    text: '#555',                 // 深灰文字
+                                    subText: '#999',              // 浅灰提示
+                                    badgeBg: '#eee',
+                                    badgeBorder: '1px solid #ddd'
+                                };
+
+                                return (
+                                    <div style={{
+                                        border: cardStyle.border,
+                                        borderRadius: 8,
+                                        padding: 10,
+                                        background: cardStyle.bg,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        gap: 10,
+                                        position: 'relative'
+                                    }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
+                                            <MiniImg src={getMushroomImg(nativeMushroom.id)} size={40}/>
+                                            <div>
+                                                <div
+                                                    style={{ fontWeight: 'bold', fontSize: 14, color: cardStyle.text }}>
+                                                    {nativeMushroom.name} {nativeBadge}
+                                                </div>
+                                                <div style={{ fontSize: 10, color: cardStyle.subText, marginTop: 2 }}>
+                                                    切换木头前记得更新库存哟~
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                            <span style={{ fontSize: 12, color: cardStyle.subText }}>当前库存:</span>
+                                            <BufferedCountInput
+                                                min={0}
+                                                value={inventory[nativeMushroom.id] || 0}
+                                                onCommit={(val) => onUpdateInventory(nativeMushroom.id, val)}
+                                                style={{
+                                                    width: 60,
+                                                    padding: '4px',
+                                                    borderRadius: 4,
+                                                    border: '1px solid #ccc',
+                                                    fontWeight: 'bold',
+                                                    color: cardStyle.text,
+                                                    background: '#fff'
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
+                                );
+                            })()
+                        )}
                     </div>
                 </div>
             </CollapsibleSection>
