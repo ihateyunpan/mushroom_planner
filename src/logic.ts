@@ -267,34 +267,45 @@ function groupBy<T>(array: T[], keyFn: (item: T) => string): Record<string, T[]>
     }, {} as Record<string, T[]>);
 }
 
-// 2. 核心排序算法
-export function calculateOrderDifficulty(
-    order: Order,
-    inventory: Record<string, number>,
-): number {
-    let remainingEffort = 0;
+export function calculatedOrderAdjustedEffort(order: Order, inventory: Record<string, number>): {
+    remaining: number,
+    total: number
+} {
     let totalEffort = 0;
+    let remainingEffort = 0;
 
     order.items.forEach(item => {
         const m = MUSHROOM_DB.find(d => d.id === item.mushroomId);
         if (!m) return;
 
-        // 检查设备是否解锁 (如果缺设备，难度视为无限大)
+        // 获取单个菌种的难度分 (假设范围是 0-100)
         const difficulty = getMushroomDifficultyScore(m);
+
+        // 计算缺口
         const needed = Math.max(0, item.count - (inventory[item.mushroomId] || 0));
 
         totalEffort += item.count * difficulty;
         remainingEffort += needed * difficulty;
     });
 
-    // 3. 生成排序值 (越小越靠前)
-    // 情况 C: 正常进行中
-    // 逻辑：剩余工作量越小越好。
-    // 为了让 "进度快" 的稍微优先，可以减去一个进度奖励
-    // 例如：剩余工作量 50 (进度10%) vs 剩余工作量 50 (进度90%)
-    // 我们希望后者排前面。
-    const progress = totalEffort > 0 ? (1 - remainingEffort / totalEffort) : 0;
-    const progressReward = progress * 20; // 这是一个调节系数，意味着 100% 的进度相当于减少了 20 点工作量
+    // 1. 如果剩余工作量为 0，直接返回 0 (最容易/已完成)
+    if (remainingEffort <= 0) return { remaining: 0, total: totalEffort };
 
-    return remainingEffort - progressReward;
+    // 2. 计算“进度折扣”
+    // 逻辑：进度越高，难度感应该稍微降低。
+    // 假设进度 100% (即将完成) 时，难度感降低 20%。
+    // Progress 范围 0~1
+    const progress = totalEffort > 0 ? (1 - remainingEffort / totalEffort) : 0;
+    const progressDiscountFactor = 1 - (progress * 0.2);
+
+    // 3. 计算加权后的剩余努力值
+    return { remaining: remainingEffort * progressDiscountFactor, total: totalEffort };
+}
+
+// 2. 核心排序算法
+export function calculateOrderDifficulty(
+    order: Order,
+    inventory: Record<string, number>,
+): number {
+    return calculatedOrderAdjustedEffort(order, inventory).remaining;
 }

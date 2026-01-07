@@ -2,12 +2,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { MUSHROOM_CHILDREN, MUSHROOM_DB } from '../database';
 import type { CalculationResult, MissingItem, PlanBatch, PlanTask } from '../logic';
+import { calculatedOrderAdjustedEffort, calculateOrderDifficulty } from '../logic';
 import type { FilterIntent, MushroomChildId, Order, SpecialConditionType } from '../types';
 import { SpecialConditions, TimeRanges, VIRTUAL_ORDER_ID, Woods } from '../types';
 import {
     getChildImg,
     getEquipmentSortKey,
     getMushroomImg,
+    getMushroomRankColor,
     getSourceInfo,
     getSpecialStyle,
     getToolIcon,
@@ -235,7 +237,11 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
             const isAReady = checkOrderStockReady(a);
             const isBReady = checkOrderStockReady(b);
             if (isAReady !== isBReady) return isAReady ? -1 : 1;
-            return a.name.localeCompare(b.name);
+
+            const scoreA = calculateOrderDifficulty(a, inventory);
+            const scoreB = calculateOrderDifficulty(b, inventory);
+
+            return scoreA - scoreB;
         });
 
         let hasEncyclopediaCore = false;
@@ -407,6 +413,8 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                 const isVirtual = order.id === VIRTUAL_ORDER_ID;
                                 const isReady = !isVirtual && checkOrderStockReady(order);
                                 const popoverKey = `order-${order.id}`;
+                                const efforts = calculatedOrderAdjustedEffort(order, inventory);
+                                const percent = 100 - efforts.remaining / efforts.total * 100;
 
                                 return (
                                     <Popover
@@ -437,26 +445,67 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                     </div>
                                                 </div>
                                             ) : (
-                                                <div style={{ minWidth: 200, padding: 4 }}>
+                                                <div style={{ minWidth: 240, padding: 8 }}>
                                                     <div style={{
-                                                        fontWeight: 'bold',
-                                                        borderBottom: '1px dashed #eee',
-                                                        paddingBottom: 6,
-                                                        marginBottom: 6,
+                                                        position: 'relative', // 为进度条提供定位基准
+                                                        marginBottom: 8,
+                                                        paddingBottom: 8,
+                                                        borderBottom: '1px solid #eee',
                                                         color: '#333',
                                                         fontSize: 13,
-                                                        display: 'flex',
-                                                        justifyContent: 'space-between',
-                                                        alignItems: 'center'
+                                                        fontWeight: 'bold'
                                                     }}>
-                                                        <span>🧾 {order.name}</span>
-                                                        {isReady && <span style={{
-                                                            fontSize: 10,
-                                                            background: '#e8f5e9',
-                                                            color: '#2e7d32',
-                                                            padding: '1px 4px',
-                                                            borderRadius: 4
-                                                        }}>可完成</span>}
+                                                        {/* 第一行：名字 + (右上角)百分比/状态 */}
+                                                        <div style={{
+                                                            display: 'flex',
+                                                            justifyContent: 'space-between',
+                                                            alignItems: 'center'
+                                                        }}>
+                                                            <span>🧾 {order.name}</span>
+
+                                                            <div style={{
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                gap: 6
+                                                            }}>
+                                                                {/* 右上方显示百分比 */}
+                                                                <span style={{
+                                                                    fontSize: 11,
+                                                                    color: '#999',
+                                                                    fontWeight: 'normal'
+                                                                }}>
+                                    {percent.toFixed(2)}%
+                                </span>
+                                                                {isReady && (
+                                                                    <span style={{
+                                                                        fontSize: 10,
+                                                                        background: '#e8f5e9',
+                                                                        color: '#2e7d32',
+                                                                        padding: '1px 4px',
+                                                                        borderRadius: 4
+                                                                    }}>可完成</span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+
+                                                        {/* 底部进度条 (绝对定位贴底) */}
+                                                        <div style={{
+                                                            position: 'absolute',
+                                                            bottom: -1, // 盖住 borderBottom，或者设为 0 在 border 上方
+                                                            left: 0,
+                                                            width: '100%',
+                                                            height: 3,
+                                                            background: '#f5f5f5', // 轨道颜色
+                                                            borderRadius: 2,
+                                                            overflow: 'hidden'
+                                                        }}>
+                                                            <div style={{
+                                                                height: '100%',
+                                                                width: `${percent.toFixed(2)}%`,
+                                                                background: percent >= 100 ? '#4caf50' : '#2196f3', // 完成绿，未完成蓝
+                                                                transition: 'width 0.3s ease-out'
+                                                            }}/>
+                                                        </div>
                                                     </div>
                                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                                         {order.items.map(item => {
@@ -464,6 +513,8 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                             if (!m) return null;
                                                             const stock = inventory[item.mushroomId] || 0;
                                                             const isInBatch = batch.tasks.some(t => t.mushroom.id === item.mushroomId);
+                                                            const isEnough = stock >= item.count;
+                                                            const mStyle = getMushroomRankColor(m);
 
                                                             return (
                                                                 <div key={item.mushroomId} style={{
@@ -484,7 +535,8 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                                     }}>
                                                                         <MiniImg src={getMushroomImg(m.id)} size={24}
                                                                                  circle/>
-                                                                        <span style={{ color: '#555' }}>
+                                                                        <span
+                                                                            style={{ color: isEnough ? '#555' : mStyle.color }}>
                                         {isInBatch ? '👉 ' : ''}{m.name}
                                     </span>
                                                                     </div>

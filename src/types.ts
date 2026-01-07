@@ -76,6 +76,8 @@ export const ItemRanks = {
     FAN: 1, // 凡品
     ZHEN: 2, // 珍品
     XIAN: 3, // 仙品
+    XIAN2: 4, // 仙品+ (橙色)
+    XIAN3: 5, // 仙品++ (红色)
 } as const;
 export type ItemRank = typeof ItemRanks[keyof typeof ItemRanks];
 

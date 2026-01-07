@@ -2,10 +2,10 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { MUSHROOM_DB } from '../database';
 import { getMushroomImg, getMushroomRankColor, PROTAGONISTS } from '../utils';
-import { CollapsibleSection, MiniImg, MushroomSelector } from './Common';
+import { CollapsibleSection, MiniImg, MushroomInfoCard, MushroomSelector, Popover } from './Common';
 import type { FilterIntent, HumidifierType, LightType, Order, WoodType } from '../types';
 import { VIRTUAL_ORDER_ID } from '../types';
-import { calculateOrderDifficulty } from "../logic.ts";
+import { calculatedOrderAdjustedEffort, calculateOrderDifficulty } from "../logic.ts";
 
 // --- 新增：带缓冲的数字输入框 (解决打字延迟 + 统一样式) ---
 const BufferedCountInput: React.FC<{
@@ -256,6 +256,7 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
     const [draftItems, setDraftItems] = useState<{ mushroomId: string; count: number }[]>([]);
     const [isDrafting, setIsDrafting] = useState(false);
     const [duplicateCheckData, setDuplicateCheckData] = useState<{ existing: Order } | null>(null);
+    const [activeMushroomPopover, setActiveMushroomPopover] = useState<string | null>(null);
 
     const handleQuickNameStart = (name: string) => {
         const existingCount = orders.filter(o => o.name.includes(name)).length;
@@ -359,6 +360,11 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
             const current = inventory[item.mushroomId] || 0;
             return current >= item.count;
         });
+    }, [inventory]);
+
+    const calculatePercent = useCallback((order: Order) => {
+        const efforts = calculatedOrderAdjustedEffort(order, inventory);
+        return 100 - efforts.remaining / efforts.total * 100;
     }, [inventory]);
 
     // 过滤并排序订单
@@ -656,7 +662,13 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                                                 padding: '2px 6px', borderRadius: 20,
                                                 boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
                                             }}>
-                                                <MiniImg src={getMushroomImg(m.id)} size={24} circle/>
+                                                <Popover
+                                                    content={<MushroomInfoCard m={m}/>}
+                                                    isOpen={activeMushroomPopover === `order-draft-${m.id}`}
+                                                    onOpenChange={(isOpen) => setActiveMushroomPopover(isOpen ? `order-draft-${m.id}` : null)}
+                                                >
+                                                    <MiniImg src={getMushroomImg(m.id)} size={24} circle/>
+                                                </Popover>
                                                 <span style={{ fontSize: 13 }}>{m.name}</span>
                                                 {/* 替换为 BufferedCountInput */}
                                                 <BufferedCountInput
@@ -702,6 +714,7 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                         const equipReady = checkEquipmentReady(order);
                         const stockReady = checkStockReady(order);
                         const isFocused = activeOrderIds.includes(order.id);
+                        const percent = calculatePercent(order);
 
                         return (
                             <div key={order.id} style={{
@@ -709,8 +722,22 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                                 borderRadius: 8, padding: 12,
                                 background: order.active ? (stockReady ? '#f1f8e9' : '#fff') : '#fafafa',
                                 opacity: order.active ? 1 : 0.75, transition: 'all 0.2s',
-                                boxShadow: isEditing ? '0 2px 8px rgba(0,0,0,0.1)' : 'none'
+                                boxShadow: isEditing ? '0 2px 8px rgba(0,0,0,0.1)' : 'none',
+                                position: 'relative', // 确保 relative 定位
+                                overflow: 'hidden'    // 确保进度条不溢出圆角
                             }}>
+                                {/* --- 新增：底部进度条背景 --- */}
+                                {!stockReady && order.active && (
+                                    <div style={{
+                                        position: 'absolute',
+                                        bottom: 0, left: 0,
+                                        height: 3, // 很细的条
+                                        width: `${percent.toFixed(2)}%`,
+                                        background: percent > 80 ? '#66bb6a' : (percent > 40 ? '#42a5f5' : '#ffa726'), // 动态颜色
+                                        transition: 'width 0.5s ease-in-out',
+                                        opacity: 0.7
+                                    }}/>
+                                )}
                                 <div className="virtual-order-header">
                                     <div style={{
                                         display: 'flex',
@@ -786,7 +813,7 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                                                     display: 'flex', alignItems: 'center', justifyContent: 'center'
                                                 }}
                                             >
-                                                {isFocused ? '❌' : '🔍'}
+                                                🔍
                                             </button>
                                         )}
                                         <button onClick={() => onToggleEdit(order.id, !isEditing)} style={{
@@ -837,7 +864,13 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                                                         borderRadius: 20,
                                                         boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
                                                     }}>
-                                                        <MiniImg src={getMushroomImg(m.id)} size={24} circle/>
+                                                        <Popover
+                                                            content={<MushroomInfoCard m={m}/>}
+                                                            isOpen={activeMushroomPopover === `order-${order.id}-${m.id}`}
+                                                            onOpenChange={(isOpen) => setActiveMushroomPopover(isOpen ? `order-${order.id}-${m.id}` : null)}
+                                                        >
+                                                            <MiniImg src={getMushroomImg(m.id)} size={24} circle/>
+                                                        </Popover>
                                                         <span style={{ fontSize: 13 }}>{m.name}</span>
                                                         <input type="number" min={0}
                                                                value={item.count === 0 ? '' : item.count}
@@ -889,8 +922,15 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                                                         border: isEnough ? '1px solid rgba(0,0,0,0.05)' : `1px dashed ${rankStyle.color}`,
                                                         fontSize: 12
                                                     }}>
-                                                        <MiniImg src={getMushroomImg(m.id)} size={20} circle/>
-                                                        <span style={{ color: isEnough? '#555':rankStyle.color }}>{m.name}</span>
+                                                        <Popover
+                                                            content={<MushroomInfoCard m={m}/>}
+                                                            isOpen={activeMushroomPopover === `order-${order.id}-${m.id}`}
+                                                            onOpenChange={(isOpen) => setActiveMushroomPopover(isOpen ? `order-${order.id}-${m.id}` : null)}
+                                                        >
+                                                            <MiniImg src={getMushroomImg(m.id)} size={20} circle/>
+                                                        </Popover>
+                                                        <span
+                                                            style={{ color: isEnough ? '#555' : rankStyle.color }}>{m.name}</span>
                                                         <span style={{
                                                             fontWeight: 'bold',
                                                             color: isEnough ? '#2e7d32' : '#e65100'

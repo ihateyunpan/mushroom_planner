@@ -98,6 +98,8 @@ const RANK_WEIGHTS = {
     [ItemRanks.FAN]: 1,
     [ItemRanks.ZHEN]: 3,
     [ItemRanks.XIAN]: 10, // 仙品很难，权重给高点
+    [ItemRanks.XIAN2]: 20, // 仙品很难，权重给高点
+    [ItemRanks.XIAN3]: 40, // 仙品很难，权重给高点
 };
 
 // 辅助：获取某个菌种的综合难度分
@@ -132,14 +134,23 @@ export function getMushroomRankColor(m: MushroomDef) {
 
     const maxRank = Math.max(...ranks);
 
-    if (maxRank === ItemRanks.XIAN) {
-        // 仙品 - 黄色
-        return { background: '#fff9c4', border: '1px solid #fbc02d', color: '#f57f17' };
+    if (maxRank === ItemRanks.XIAN3) {
+        // 🔴 XIAN2 - 红色 (背景加深一点，更显眼)
+        // Background: Red 100, Border: Red 600, Text: Red 800
+        return { background: '#ffcdd2', border: '1px solid #e53935', color: '#c62828' };
+    } else if (maxRank === ItemRanks.XIAN2) {
+        // 🟠 XIAN1 - 深橙色/珊瑚色 (为了和黄色区分，背景稍微深一点)
+        // Background: Orange 100 (比之前的 50 深), Border: Orange 700, Text: Deep Orange 900
+        return { background: '#ffe0b2', border: '1px solid #f57c00', color: '#e65100' };
+    } else if (maxRank === ItemRanks.XIAN) {
+        // 🟡 XIAN - 亮黄色 (保持浅色背景)
+        // Background: Yellow 50, Border: Yellow 600, Text: Yellow 900
+        return { background: '#fffde7', border: '1px solid #fdd835', color: '#f57f17' };
     } else if (maxRank === ItemRanks.ZHEN) {
-        // 珍品 - 紫色
+        // 🟣 ZHEN - 紫色
         return { background: '#f3e5f5', border: '1px solid #ba68c8', color: '#7b1fa2' };
     } else {
-        // 凡品 - 蓝色
+        // 🔵 FAN - 蓝色
         return { background: '#e3f2fd', border: '1px solid #90caf9', color: '#1565c0' };
     }
 }

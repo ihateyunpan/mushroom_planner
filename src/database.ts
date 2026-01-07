@@ -45,14 +45,14 @@ export const WOOD_INFO: Record<WoodType, { source: string; rank: ItemRank }> = {
     [Woods.GE_TENG]: { source: '9级', rank: ItemRanks.ZHEN },
     [Woods.JIAN_CI]: { source: '10级', rank: ItemRanks.ZHEN },
     [Woods.JIAN_JING]: { source: '12级', rank: ItemRanks.XIAN },
-    [Woods.LV_SONG]: { source: '13级', rank: ItemRanks.XIAN },
-    [Woods.GOLD]: { source: '15级', rank: ItemRanks.XIAN },
+    [Woods.LV_SONG]: { source: '13级', rank: ItemRanks.XIAN2 },
+    [Woods.GOLD]: { source: '15级', rank: ItemRanks.XIAN3 },
     [Woods.LOVE]: { source: '白龙1', rank: ItemRanks.ZHEN },
     [Woods.QIAN_NIU]: { source: '白龙1', rank: ItemRanks.FAN },
     [Woods.QING]: { source: '白龙2', rank: ItemRanks.ZHEN },
     [Woods.YAN]: { source: '白龙2', rank: ItemRanks.ZHEN },
-    [Woods.MING]: { source: '白龙3', rank: ItemRanks.XIAN },
-    [Woods.SHU]: { source: '白龙3', rank: ItemRanks.XIAN },
+    [Woods.SHU]: { source: '白龙3', rank: ItemRanks.XIAN2 },
+    [Woods.MING]: { source: '白龙3', rank: ItemRanks.XIAN3 },
 };
 
 export const LIGHT_INFO: Record<LightType, { source: string; rank: ItemRank }> = {

@@ -292,39 +292,54 @@ export const MushroomInfoCard: React.FC<{ m: MushroomDef }> = ({m}) => {
                 </div>
                 {m.special && (
                     (() => {
-                        const style = getSpecialStyle(m.special);
+                        const spStyle = getSpecialStyle(m.special);
                         return (
                             <div style={{
                                 marginTop: 4,
-                                background: style.bg,
+                                background: spStyle.bg,
                                 padding: '6px 8px',
                                 borderRadius: 6,
-                                border: `1px solid ${style.border}`,
-                                display: 'flex', flexDirection: 'column', gap: 4
+                                border: `1px solid ${spStyle.border}`,
+                                display: 'flex',
+                                alignItems: 'center',        // 垂直居中
+                                justifyContent: 'space-between', // 两端对齐
+                                gap: 4,
+                                marginBottom: 6 // 增加底部间距
                             }}>
                                 <div style={{
-                                    color: style.color, fontWeight: 'bold',
-                                    display: 'flex', alignItems: 'center', gap: 4
+                                    color: spStyle.color,
+                                    fontWeight: 'bold',
+                                    display: 'flex', alignItems: 'center', gap: 4,
+                                    whiteSpace: 'nowrap'
                                 }}>
-                                    <span>{style.icon}</span>{m.special}
+                                    <span>{spStyle.icon}</span>{m.special}
                                 </div>
-                                {m.save ? (
-                                    <div style={{display: 'flex', alignItems: 'center', gap: 4}}>
-                                        <span style={{color: '#2e7d32', fontWeight: 'bold'}}>✅ 救助</span>
-                                        {TOOL_INFO[m.special] && (
-                                            <div style={{
-                                                display: 'flex', alignItems: 'center', gap: 2,
-                                                background: '#fff', padding: '1px 5px', borderRadius: 4,
-                                                border: '1px solid rgba(0,0,0,0.1)'
-                                            }}>
-                                                <MiniImg src={TOOL_INFO[m.special].img} size={14} circle/>
-                                                <span style={{color: '#333'}}>{TOOL_INFO[m.special].name}</span>
-                                            </div>
-                                        )}
-                                    </div>
-                                ) : (
-                                    <span style={{color: '#c62828', fontWeight: 'bold'}}>❌ 不救</span>
-                                )}
+                                <div style={{
+                                    display: 'flex', alignItems: 'center', gap: 4,
+                                    fontSize: 11
+                                }}>
+                                    {m.save ? (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                            <span
+                                                style={{ color: '#2e7d32', fontWeight: 'bold', whiteSpace: 'nowrap' }}>✅ 救助</span>
+                                            {TOOL_INFO?.[m.special] && (
+                                                <div style={{
+                                                    display: 'flex', alignItems: 'center', gap: 2,
+                                                    background: '#fff', padding: '1px 5px',
+                                                    borderRadius: 4, border: '1px solid rgba(0,0,0,0.1)'
+                                                }}>
+                                                    <MiniImg src={TOOL_INFO[m.special].img} size={14} circle/>
+                                                    <span style={{
+                                                        color: '#333',
+                                                        whiteSpace: 'nowrap'
+                                                    }}>{TOOL_INFO[m.special].name}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <span style={{ color: '#c62828', fontWeight: 'bold', whiteSpace: 'nowrap' }}>❌ 不救</span>
+                                    )}
+                                </div>
                             </div>
                         );
                     })()
