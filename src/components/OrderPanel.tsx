@@ -550,7 +550,7 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                                     });
                                     return <span>进度: 待采摘 <b style={{ color: '#e65100' }}>{countA}</b>，有库存 <b
                                         style={{ color: '#2e7d32' }}>{countB}</b>，未收集 <b
-                                        style={{ color: '#c62828' }}>{countC}</b></span>;
+                                        style={{ color: '#c62828' }}>{countC}</b>（{MUSHROOM_DB.length - countC}/{MUSHROOM_DB.length}）</span>;
                                 })()}
                             </div>
                         )}
