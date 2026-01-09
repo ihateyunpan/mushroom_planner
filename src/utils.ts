@@ -120,6 +120,9 @@ export function getMushroomDifficultyScore(m: MushroomDef): number {
         finalWeight += RANK_WEIGHTS[hRank] ?? UNKNOWN_RANK_WEIGHT;
     }
 
+    if (m.special != null) {
+        finalWeight *= 1.5
+    }
 
     return finalWeight;
 }
