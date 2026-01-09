@@ -97,9 +97,9 @@ const UNKNOWN_RANK_WEIGHT = 5;
 const RANK_WEIGHTS = {
     [ItemRanks.FAN]: 1,
     [ItemRanks.ZHEN]: 3,
-    [ItemRanks.XIAN]: 10, // 仙品很难，权重给高点
-    [ItemRanks.XIAN2]: 20, // 仙品很难，权重给高点
-    [ItemRanks.XIAN3]: 40, // 仙品很难，权重给高点
+    [ItemRanks.XIAN]: 5, // 仙品很难，权重给高点
+    [ItemRanks.XIAN2]: 7, // 仙品很难，权重给高点
+    [ItemRanks.XIAN3]: 9, // 仙品很难，权重给高点
 };
 
 // 辅助：获取某个菌种的综合难度分
@@ -111,17 +111,17 @@ export function getMushroomDifficultyScore(m: MushroomDef): number {
     const hRank = HUMIDIFIER_INFO[m.humidifier as HumidifierType]?.rank;
 
     if (wRank != null) {
-        finalWeight += RANK_WEIGHTS[wRank] ?? UNKNOWN_RANK_WEIGHT;
+        finalWeight *= RANK_WEIGHTS[wRank] ?? UNKNOWN_RANK_WEIGHT;
     }
     if (lRank != null) {
-        finalWeight += RANK_WEIGHTS[lRank] ?? UNKNOWN_RANK_WEIGHT;
+        finalWeight *= RANK_WEIGHTS[lRank] ?? UNKNOWN_RANK_WEIGHT;
     }
     if (hRank != null) {
-        finalWeight += RANK_WEIGHTS[hRank] ?? UNKNOWN_RANK_WEIGHT;
+        finalWeight *= RANK_WEIGHTS[hRank] ?? UNKNOWN_RANK_WEIGHT;
     }
 
     if (m.special != null) {
-        finalWeight *= 1.5
+        finalWeight *= 4
     }
 
     return finalWeight;
