@@ -412,7 +412,7 @@ const MAO_MUSHROOMS: MushroomDef[] = [
         wood: Woods.LV_SONG,
         light: Lights.YU_RONG,
         humidifier: Humidifiers.TAO,
-        special: SpecialConditions.MUCH,
+        special: SpecialConditions.LESS,
         save: true,
     },
     {
