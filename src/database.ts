@@ -174,6 +174,7 @@ const CI_MUSHROOMS: MushroomDef[] = [
         starter: MushroomChildIds.CI,
         wood: Woods.JIAN_CI,
         light: Lights.HUO,
+        longer: true,
     },
     {
         id: 'ci11',
@@ -183,7 +184,8 @@ const CI_MUSHROOMS: MushroomDef[] = [
         wood: Woods.JIAN_CI,
         light: Lights.HUO,
         special: SpecialConditions.LESS,
-        save: true
+        save: true,
+        longer: true,
     },
     {
         id: 'ci12',
@@ -193,7 +195,8 @@ const CI_MUSHROOMS: MushroomDef[] = [
         wood: Woods.JIAN_CI,
         light: Lights.HUO,
         special: SpecialConditions.MUCH,
-        save: true
+        save: true,
+        longer: true,
     },
     {
         id: 'ci13',
@@ -1343,6 +1346,7 @@ const DI_MUSHROOMS: MushroomDef[] = [
         starter: MushroomChildIds.DI,
         wood: Woods.YAN,
         light: Lights.HUO,
+        longer: true,
     },
     {
         id: 'di8',
@@ -1353,6 +1357,7 @@ const DI_MUSHROOMS: MushroomDef[] = [
         light: Lights.HUO,
         special: SpecialConditions.LESS,
         save: true,
+        longer: true,
     },
     {
         id: 'di9',
@@ -1363,6 +1368,7 @@ const DI_MUSHROOMS: MushroomDef[] = [
         light: Lights.HUO,
         special: SpecialConditions.MUCH,
         save: true,
+        longer: true,
     },
     {
         id: 'di10',
@@ -2763,6 +2769,7 @@ const RUBY_MUSHROOMS: MushroomDef[] = [
         wood: Woods.JIAN_JING,
         light: Lights.DRAGON,
         humidifier: Humidifiers.NIAO,
+        longer: true,
     },
     {
         id: 'ruby11',
@@ -2774,6 +2781,7 @@ const RUBY_MUSHROOMS: MushroomDef[] = [
         humidifier: Humidifiers.NIAO,
         special: SpecialConditions.LESS,
         save: true,
+        longer: true,
     },
     {
         id: 'ruby12',
@@ -2785,6 +2793,7 @@ const RUBY_MUSHROOMS: MushroomDef[] = [
         humidifier: Humidifiers.NIAO,
         special: SpecialConditions.MUCH,
         save: true,
+        longer: true,
     },
     {
         id: 'ruby13',
@@ -2932,6 +2941,7 @@ const HOU_MUSHROOMS: MushroomDef[] = [
         wood: Woods.QING,
         light: Lights.HUO,
         humidifier: Humidifiers.LIAN,
+        longer: true,
     },
     {
         id: 'hou8',
@@ -2943,6 +2953,7 @@ const HOU_MUSHROOMS: MushroomDef[] = [
         humidifier: Humidifiers.LIAN,
         special: SpecialConditions.LESS,
         save: true,
+        longer: true,
     },
     {
         id: 'hou9',
@@ -2954,6 +2965,7 @@ const HOU_MUSHROOMS: MushroomDef[] = [
         humidifier: Humidifiers.LIAN,
         special: SpecialConditions.MUCH,
         save: true,
+        longer: true,
     },
     {
         id: 'hou10',

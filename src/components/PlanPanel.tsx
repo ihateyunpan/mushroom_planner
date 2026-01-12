@@ -274,28 +274,6 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
         const showEncycBadge = hasEncyclopediaCore || hasEncyclopediaPassenger;
         const isWeakEncycBadge = !hasEncyclopediaCore && hasEncyclopediaPassenger;
 
-        const showTimeWarning = batch.tasks.some(task => {
-            if (task.isPassenger) return false; // 只针对核心任务检查风险
-            const coreM = task.mushroom;
-
-            return MUSHROOM_DB.some(dbM => {
-                if (dbM.id === coreM.id) return false; // 排除自己
-                if (dbM.starter !== coreM.starter) return false; // 必须是同一种初始菌
-
-                // 检查环境兼容性 (Potential Hitchhiker Check)
-                // 1. 木头：批次木头是确定的，菌种必须匹配或通用
-                const woodMatch = dbM.wood === batch.env.wood;
-
-                // 2. 日照/补水/时间：批次可能是'任意'，如果是'任意'则视为兼容(因为可能随机到该环境)；如果是特定值则必须匹配
-                const lightMatch = batch.env.light === '任意' || !dbM.light || dbM.light === batch.env.light;
-                const humMatch = batch.env.humidifier === '任意' || !dbM.humidifier || dbM.humidifier === batch.env.humidifier;
-                const timeMatch = batch.env.time === '任意' || !dbM.time || dbM.time === batch.env.time;
-                const conditionMatch = dbM.special === coreM.special;
-
-                return woodMatch && lightMatch && humMatch && timeMatch && conditionMatch;
-            });
-        });
-
         const coreTools: Record<string, number> = {};
         const passengerTools: Record<string, number> = {};
         batch.tasks.forEach(t => {
@@ -339,18 +317,20 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                 isPassenger: boolean,
                 special?: string,
                 targetId: string,
-                hasUncollected: boolean // 新增字段
+                hasUncollected: boolean, // 新增字段
+                longer?: boolean,
             }>();
 
             tasks.forEach(t => {
-                const key = `${t.mushroom.starter}_${!!t.isPassenger}_${t.mushroom.special || 'none'}`;
+                const key = `${t.mushroom.starter}_${!!t.isPassenger}_${t.mushroom.special || 'none'}_${(t.mushroom.longer || false)? 1:0}`;
                 if (!map.has(key)) map.set(key, {
                     starter: t.mushroom.starter,
                     count: 0,
                     isPassenger: !!t.isPassenger,
                     special: t.mushroom.special,
                     targetId: t.mushroom.id,
-                    hasUncollected: false // 初始化
+                    hasUncollected: false, // 初始化
+                    longer: t.mushroom.longer,
                 });
 
                 const entry = map.get(key)!;
@@ -706,17 +686,6 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                         borderRadius: 8,
                         border: '1px solid #f0f0f0'
                     }}>
-                        {showTimeWarning && <div style={{
-                            color: '#e65100',
-                            background: '#fff3e0',
-                            border: '1px solid #ffe0b2',
-                            padding: '6px 10px',
-                            borderRadius: 6,
-                            fontSize: 12,
-                            fontWeight: 'bold',
-                            marginBottom: 8
-                        }}>⚠️ 核心目标幼菌生长时间更长，请务必注意区分，避免收获错误品种！</div>}
-
                         {['healthy', 'less', 'much', 'bug', 'unsaved'].map(key => {
                             const tasks = diseaseGroups[key];
                             if (tasks.length === 0) return null;
@@ -793,7 +762,7 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
                                                     )}
                                                 </div>
 
-                                                <span>{MUSHROOM_CHILDREN[t.starter as MushroomChildId]}</span>
+                                                <span>{MUSHROOM_CHILDREN[t.starter as MushroomChildId]}{(t.longer || false) && ' (久)'}</span>
                                                 <span style={{ fontWeight: 'bold', color, marginLeft: 2 }}>
                                                     x{remainingNeeded}
                                                     {growing > 0 && <span style={{

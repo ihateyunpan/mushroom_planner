@@ -98,6 +98,7 @@ export interface MushroomDef {
     special?: SpecialConditionType; // 如果未定义，就是不需要特殊情况
     save?: boolean; // 如果有特殊情况，要不要处理
     ingameIndex?: number; // 新增：游戏内图鉴顺序
+    longer?: boolean;
 }
 
 // 订单
