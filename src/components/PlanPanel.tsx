@@ -220,16 +220,20 @@ export const PlanPanel: React.FC<PlanPanelProps> = ({
     const renderBatch = (batch: PlanBatch, _: number, isFlexibleTime: boolean) => {
         const relatedOrderMap = new Map<string, Order>();
         batch.tasks.forEach(t => {
-            orders.filter(o => {
+            let requiredCount = 0;
+            const tmpOrders = orders.filter(o => {
                 if (!o.active) return false;
                 // 1. 找到订单中对应的物品
                 const item = o.items.find(i => i.mushroomId === t.mushroom.id);
                 // 2. 必须包含该物品
                 if (!item) return false;
-                // 3. (新增) 只有当库存不足时，才建立关联
-                const currentStock = inventory[item.mushroomId] || 0;
-                return currentStock < item.count;
-            }).forEach(o => relatedOrderMap.set(o.id, o));
+                requiredCount += item.count;
+                return true;
+            });
+            const inv = inventory[t.mushroom.id] || 0;
+            if (inv < requiredCount) {
+                tmpOrders.forEach(o => relatedOrderMap.set(o.id, o));
+            }
         });
         const relatedOrders = Array.from(relatedOrderMap.values());
 
